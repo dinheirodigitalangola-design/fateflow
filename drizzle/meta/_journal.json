@@ -29,6 +29,20 @@
       "when": 1792190445059,
       "tag": "0003_multi_anime_franchises",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "5",
+      "when": 1792191256937,
+      "tag": "0004_episode_progress",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "5",
+      "when": 1792192003304,
+      "tag": "0005_work_meta",
+      "breakpoints": true
     }
   ]
 }

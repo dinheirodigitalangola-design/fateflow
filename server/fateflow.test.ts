@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { CATALOG_ROUTES, CATALOG_WORKS, clampWatched, overallProgress, statusFor } from "../shared/fateflowCatalog";
+import { CATALOG_ROUTES, CATALOG_WORKS, clampWatched, overallProgress, recommend, statusFor } from "../shared/fateflowCatalog";
 import { appRouter } from "./routers";
 import type { TrpcContext } from "./_core/context";
 
@@ -25,20 +25,24 @@ function userCtx(): TrpcContext {
   };
 }
 
-describe("FateFlow Fase 1 — catálogo normalizado (15 obras)", () => {
-  it("tem exatamente as 15 obras do MVP com slugs únicos", () => {
-    expect(CATALOG_WORKS).toHaveLength(15);
+describe("FateFlow Fase 1 — catálogo normalizado (26 obras)", () => {
+  it("tem 26 obras validadas com slugs únicos", () => {
+    expect(CATALOG_WORKS).toHaveLength(26);
     const slugs = CATALOG_WORKS.map((w) => w.slug);
-    expect(new Set(slugs).size).toBe(15);
+    expect(new Set(slugs).size).toBe(26);
   });
 
-  it("mantém os episódios validados do MVP", () => {
+  it("mantém os episódios validados do MVP e das expansões", () => {
     const bySlug = new Map(CATALOG_WORKS.map((w) => [w.slug, w.episodes]));
     expect(bySlug.get("ubw")).toBe(26);
     expect(bySlug.get("zero")).toBe(25);
     expect(bySlug.get("babylonia")).toBe(21);
     expect(bySlug.get("camelot")).toBe(2);
     expect(bySlug.get("hf1")).toBe(1);
+    expect(bySlug.get("fsn2006")).toBe(24);
+    expect(bySlug.get("extra")).toBe(13);
+    expect(bySlug.get("carnival")).toBe(12);
+    expect(bySlug.get("prisma-3rei")).toBe(12);
   });
 
   it("tem 4 rotas com a Fuyuki como default e 5 obras", () => {
@@ -76,6 +80,31 @@ describe("FateFlow Fase 1 — regras de progresso", () => {
     expect(r.total).toBe(27);
     expect(r.watched).toBe(15);
     expect(r.percent).toBe(Math.round((15 / 27) * 100));
+  });
+});
+
+describe("motor de recomendação determinístico", () => {
+  const works = [
+    { slug: "ubw", shortTitle: "UBW", episodes: 26, order: 1 },
+    { slug: "hf1", shortTitle: "HF1", episodes: 1, order: 2 },
+    { slug: "zero", shortTitle: "Zero", episodes: 25, order: 5 },
+  ];
+  it("continua o que está a meio com motivo", () => {
+    const [rec] = recommend(works, { ubw: 14 });
+    expect(rec).toMatchObject({ workSlug: "ubw", kind: "continue", remaining: 12 });
+    expect(rec.reason).toContain("UBW");
+  });
+  it("sugere o próximo da rota com pré-requisitos feitos", () => {
+    const [rec] = recommend(works, { ubw: 26 });
+    expect(rec).toMatchObject({ workSlug: "hf1", kind: "next" });
+  });
+  it("não salta para o fim quando há anteriores por ver", () => {
+    const recs = recommend(works, {}, 3);
+    expect(recs[0]).toMatchObject({ workSlug: "ubw" });
+    expect(recs.map((r) => r.workSlug)).toContain("zero");
+  });
+  it("rota concluída devolve vazio", () => {
+    expect(recommend(works, { ubw: 26, hf1: 1, zero: 25 })).toEqual([]);
   });
 });
 

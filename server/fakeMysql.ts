@@ -24,6 +24,8 @@ export function createFakeMysql() {
     routes: [],
     route_items: [],
     user_progress: [],
+    user_episode_progress: [],
+    user_work_meta: [],
     user_preferences: [],
     user_library: [],
     activity_log: [],
@@ -68,7 +70,9 @@ export function createFakeMysql() {
       case "route_items":
       case "user_progress":
       case "user_library":
-        return (key === "route_items" ? a.routeId === b.routeId : a.userId === b.userId) && a.workId === b.workId;
+      case "user_episode_progress":
+      case "user_work_meta":
+        return (key === "route_items" ? a.routeId === b.routeId : a.userId === b.userId) && (key === "user_episode_progress" ? a.episodeId === b.episodeId : a.workId === b.workId);
       case "user_preferences":
         return a.userId === b.userId;
       default:

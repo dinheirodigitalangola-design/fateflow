@@ -1,6 +1,6 @@
 /** Queries FateFlow sobre o Drizzle. userId vem sempre do ctx autenticado — nunca do browser. */
 import { and, desc, eq } from "drizzle-orm";
-import { activityLog, episodes, franchises, routeItems, routes, userLibrary, userPreferences, userProgress, works } from "../drizzle/schema";
+import { activityLog, episodes, franchises, routeItems, routes, userEpisodeProgress, userLibrary, userPreferences, userProgress, userWorkMeta, works } from "../drizzle/schema";
 import { clampWatched, statusFor } from "../shared/fateflowCatalog";
 import { getDb } from "./db";
 
@@ -145,6 +145,9 @@ export async function setWorkProgress(userId: number, workSlug: string, watchedR
     });
   }
 
+  // Reconcilia as linhas individuais: contagem N == primeiros N episódios vistos.
+  await syncEpisodeRows(db, userId, work.id, watched);
+
   // histórico server-side (só quando avança)
   const prev = existing[0]?.watchedEpisodes ?? 0;
   if (watched > prev) {
@@ -215,4 +218,223 @@ export async function listEpisodes(workSlug: string) {
   if (!work) return [];
   const rows = await db.select().from(episodes).where(eq(episodes.workId, work.id));
   return [...rows].sort((a, b) => a.episodeNumber - b.episodeNumber);
+}
+
+export type AdminWorkInput = {
+  slug: string;
+  title: string;
+  shortTitle?: string;
+  description?: string;
+  year?: string;
+  format: "Série" | "Filme" | "Especial" | "OVA";
+  universe: string;
+  arc?: string;
+  orderIndex: number;
+  episodeCount: number;
+  color?: string;
+  badge?: string | null;
+  coverUrl?: string | null;
+  franchiseSlug?: string;
+  isActive?: boolean;
+};
+
+/** Upsert administrativo de obra (cria ou atualiza por slug). */
+export async function upsertWork(input: AdminWorkInput) {
+  const db = await dbOrThrow();
+  let franchiseId: number | null = null;
+  if (input.franchiseSlug) {
+    const frows = await db.select().from(franchises).where(eq(franchises.slug, input.franchiseSlug)).limit(1);
+    if (!frows[0]) throw new Error("FRANCHISE_NOT_FOUND");
+    franchiseId = frows[0].id;
+  }
+  const values = {
+    slug: input.slug,
+    title: input.title,
+    shortTitle: input.shortTitle ?? null,
+    description: input.description ?? null,
+    year: input.year ?? null,
+    format: input.format,
+    universe: input.universe,
+    arc: input.arc ?? null,
+    orderIndex: input.orderIndex,
+    episodeCount: input.episodeCount,
+    color: input.color ?? null,
+    badge: input.badge ?? null,
+    coverUrl: input.coverUrl ?? null,
+    franchiseId,
+    isActive: input.isActive ?? true,
+  };
+  await db.insert(works).values(values).onDuplicateKeyUpdate({ set: { ...values } });
+  return (await getWorkBySlug(input.slug))!;
+}
+
+export async function setWorkActive(slug: string, isActive: boolean) {
+  const db = await dbOrThrow();
+  const work = await getWorkBySlug(slug);
+  if (!work) throw new Error("WORK_NOT_FOUND");
+  await db.update(works).set({ isActive }).where(eq(works.slug, slug));
+  return { slug, isActive };
+}
+
+export type WorkMetaInput = { rating?: number | null; notes?: string | null; favorite?: boolean };
+
+/** Meta pessoal da obra (avaliação 1–5, notas, favorito). */
+export async function getWorkMeta(userId: number, workSlug: string) {
+  const db = await dbOrThrow();
+  const work = await getWorkBySlug(workSlug);
+  if (!work) throw new Error("WORK_NOT_FOUND");
+  const rows = await db
+    .select()
+    .from(userWorkMeta)
+    .where(and(eq(userWorkMeta.userId, userId), eq(userWorkMeta.workId, work.id)))
+    .limit(1);
+  return rows[0] ?? { userId, workId: work.id, rating: null as number | null, notes: null as string | null, favorite: false, updatedAt: null as Date | null };
+}
+
+export async function updateWorkMeta(userId: number, workSlug: string, input: WorkMetaInput) {
+  const db = await dbOrThrow();
+  const work = await getWorkBySlug(workSlug);
+  if (!work) throw new Error("WORK_NOT_FOUND");
+  if (input.rating !== undefined && input.rating !== null && (input.rating < 1 || input.rating > 5)) {
+    throw new Error("INVALID_RATING");
+  }
+  const values = {
+    userId,
+    workId: work.id,
+    rating: input.rating !== undefined ? input.rating : undefined,
+    notes: input.notes !== undefined ? (input.notes ? input.notes.slice(0, 2000) : null) : undefined,
+    favorite: input.favorite,
+  };
+  const current = await getWorkMeta(userId, workSlug);
+  const next = {
+    userId,
+    workId: work.id,
+    rating: values.rating !== undefined ? values.rating : current.rating,
+    notes: values.notes !== undefined ? values.notes : current.notes,
+    favorite: values.favorite ?? current.favorite,
+  };
+  await db.insert(userWorkMeta).values(next).onDuplicateKeyUpdate({ set: { rating: next.rating, notes: next.notes, favorite: next.favorite } });
+  return next;
+}
+
+type Db = NonNullable<Awaited<ReturnType<typeof getDb>>>;
+
+async function orderedEpisodeIds(db: Db, workId: number): Promise<number[]> {
+  const rows = await db.select().from(episodes).where(eq(episodes.workId, workId));
+  return [...rows].sort((a, b) => a.episodeNumber - b.episodeNumber).map((e) => e.id);
+}
+
+async function watchedEpisodeIds(db: Db, userId: number): Promise<Set<number>> {
+  const rows = await db.select().from(userEpisodeProgress).where(eq(userEpisodeProgress.userId, userId));
+  return new Set(rows.map((r) => r.episodeId as number));
+}
+
+/** Garante que exatamente os primeiros `count` episódios ficam marcados. */
+async function syncEpisodeRows(db: Db, userId: number, workId: number, count: number): Promise<void> {
+  const ordered = await orderedEpisodeIds(db, workId);
+  const keep = new Set(ordered.slice(0, Math.max(0, count)));
+  const watched = await watchedEpisodeIds(db, userId);
+  for (const episodeId of keep) {
+    if (!watched.has(episodeId)) {
+      await db.insert(userEpisodeProgress).values({ userId, episodeId }).onDuplicateKeyUpdate({ set: { userId } });
+    }
+  }
+  for (const episodeId of ordered) {
+    if (!keep.has(episodeId) && watched.has(episodeId)) {
+      await db.delete(userEpisodeProgress).where(and(eq(userEpisodeProgress.userId, userId), eq(userEpisodeProgress.episodeId, episodeId)));
+    }
+  }
+}
+
+async function recountWork(db: Db, userId: number, work: { id: number; episodeCount: number; orderIndex: number | null; slug: string }) {
+  const ordered = await orderedEpisodeIds(db, work.id);
+  const watched = await watchedEpisodeIds(db, userId);
+  const count = ordered.filter((id) => watched.has(id)).length;
+  const status = statusFor(work.episodeCount, count, work.orderIndex ?? 99);
+  const existing = await db
+    .select()
+    .from(userProgress)
+    .where(and(eq(userProgress.userId, userId), eq(userProgress.workId, work.id)))
+    .limit(1);
+  const row = {
+    userId,
+    workId: work.id,
+    watchedEpisodes: count,
+    status,
+    completedAt: count >= work.episodeCount ? new Date() : null,
+  };
+  if (existing[0]) {
+    await db.update(userProgress).set(row).where(and(eq(userProgress.userId, userId), eq(userProgress.workId, work.id)));
+  } else {
+    await db.insert(userProgress).values(row);
+  }
+  return { count, status };
+}
+
+function prevCountOf(map: Record<string, number>, slug: string): number {
+  return map[slug] ?? 0;
+}
+
+export async function listEpisodesWithProgress(userId: number, workSlug: string) {
+  const db = await dbOrThrow();
+  const work = await getWorkBySlug(workSlug);
+  if (!work) throw new Error("WORK_NOT_FOUND");
+  const rows = await db.select().from(episodes).where(eq(episodes.workId, work.id));
+  const watched = await watchedEpisodeIds(db, userId);
+  const list = [...rows]
+    .sort((a, b) => a.episodeNumber - b.episodeNumber)
+    .map((e) => ({ ...e, watched: watched.has(e.id) }));
+  const watchedCount = list.filter((e) => e.watched).length;
+  const nextEpisode = list.find((e) => !e.watched)?.episodeNumber ?? null;
+  return { work, episodes: list, watchedCount, nextEpisode };
+}
+
+export async function setEpisodeWatched(userId: number, workSlug: string, episodeNumber: number, watched: boolean) {
+  const db = await dbOrThrow();
+  const work = await getWorkBySlug(workSlug);
+  if (!work) throw new Error("WORK_NOT_FOUND");
+  const epRows = await db.select().from(episodes).where(eq(episodes.workId, work.id));
+  const ep = epRows.find((e) => e.episodeNumber === episodeNumber);
+  if (!ep) throw new Error("EPISODE_NOT_FOUND");
+  const before = await getUserProgressMap(userId);
+  const prev = prevCountOf(before, work.slug);
+  if (watched) {
+    await db.insert(userEpisodeProgress).values({ userId, episodeId: ep.id }).onDuplicateKeyUpdate({ set: { userId } });
+  } else {
+    await db.delete(userEpisodeProgress).where(and(eq(userEpisodeProgress.userId, userId), eq(userEpisodeProgress.episodeId, ep.id)));
+  }
+  const { count, status } = await recountWork(db, userId, work);
+  if (count > prev) {
+    await db.insert(activityLog).values({
+      userId,
+      actionType: count >= work.episodeCount ? "work_completed" : "episode_completed",
+      workId: work.id,
+      episodeId: ep.id,
+      metadata: { slug: work.slug, episode: episodeNumber, from: prev, to: count },
+    });
+  } else if (count === 0 && prev > 0) {
+    await db.insert(activityLog).values({ userId, actionType: "work_reset", workId: work.id, metadata: { slug: work.slug } });
+  }
+  return { slug: work.slug, episodeNumber, watched, watchedEpisodes: count, status };
+}
+
+/** Saltar para o episódio N: marca 1..N como vistos (e desmarca para a frente). */
+export async function markUpToEpisode(userId: number, workSlug: string, episodeNumber: number) {
+  const db = await dbOrThrow();
+  const work = await getWorkBySlug(workSlug);
+  if (!work) throw new Error("WORK_NOT_FOUND");
+  const target = clampWatched(work.episodeCount, episodeNumber);
+  const before = await getUserProgressMap(userId);
+  const prev = prevCountOf(before, work.slug);
+  await syncEpisodeRows(db, userId, work.id, target);
+  const { count, status } = await recountWork(db, userId, work);
+  if (count > prev) {
+    await db.insert(activityLog).values({
+      userId,
+      actionType: count >= work.episodeCount ? "work_completed" : "episode_completed",
+      workId: work.id,
+      metadata: { slug: work.slug, jumpTo: target, from: prev, to: count },
+    });
+  }
+  return { slug: work.slug, watchedEpisodes: count, status };
 }

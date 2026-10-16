@@ -34,6 +34,7 @@ export interface CatalogRoute {
 }
 
 export const CATALOG_WORKS: CatalogWork[] = [
+  { slug: "fsn2006", title: "Fate/stay night (2006)", shortTitle: "Fate/stay night 2006", year: "2006", format: "Série", episodes: 24, universe: "Fuyuki", arc: "Versão 2006", order: 0, color: "crimson", description: "A adaptação original da visual novel pelo Studio Deen — rota alternativa para completar depois da principal.", badge: "Versão 2006" },
   { slug: "ubw", title: "Fate/stay night: Unlimited Blade Works", shortTitle: "Unlimited Blade Works", year: "2014–2015", format: "Série", episodes: 26, universe: "Fuyuki", arc: "Rota principal", order: 1, color: "crimson", description: "A melhor porta de entrada moderna para o conflito de Fuyuki. Acompanha Shirou Emiya e Rin Tohsaka na Guerra do Santo Graal.", badge: "Comece aqui" },
   { slug: "hf1", title: "Fate/stay night: Heaven’s Feel I — Presage Flower", shortTitle: "Heaven’s Feel I", year: "2017", format: "Filme", episodes: 1, universe: "Fuyuki", arc: "Rota principal", order: 2, color: "crimson", description: "O primeiro filme da trilogia que aprofunda a rota de Sakura Matou." },
   { slug: "hf2", title: "Fate/stay night: Heaven’s Feel II — Lost Butterfly", shortTitle: "Heaven’s Feel II", year: "2019", format: "Filme", episodes: 1, universe: "Fuyuki", arc: "Rota principal", order: 3, color: "crimson", description: "A segunda parte da trilogia cinematográfica de Heaven’s Feel." },
@@ -49,6 +50,16 @@ export const CATALOG_WORKS: CatalogWork[] = [
   { slug: "prisma", title: "Fate/kaleid liner Prisma☆Illya", shortTitle: "Prisma☆Illya", year: "2013", format: "Série", episodes: 10, universe: "Prisma☆Illya", arc: "Prisma☆Illya", order: 13, color: "violet", description: "Uma releitura magical girl da franquia com Illya no centro da história." },
   { slug: "prisma-2wei", title: "Fate/kaleid liner Prisma☆Illya 2wei!", shortTitle: "Prisma☆Illya 2wei!", year: "2014", format: "Série", episodes: 10, universe: "Prisma☆Illya", arc: "Prisma☆Illya", order: 14, color: "violet", description: "A segunda temporada do spin-off de magical girl." },
   { slug: "emiya-menu", title: "Today’s Menu for the Emiya Family", shortTitle: "Today’s Menu", year: "2017–2019", format: "Série", episodes: 13, universe: "Comédia", arc: "Comédia", order: 15, color: "amber", description: "Um spin-off calmo e delicioso sobre a vida quotidiana dos personagens." },
+  { slug: "extra", title: "Fate/EXTRA Last Encore", shortTitle: "EXTRA Last Encore", year: "2018", format: "Série", episodes: 13, universe: "Alternativo", arc: "Universos alternativos", order: 16, color: "blue", description: "Hakuno Kishinami acorda na Moon Cell sem memórias — uma Guerra alternativa e sombria." },
+  { slug: "prototype", title: "Fate/Prototype", shortTitle: "Fate/Prototype", year: "2011", format: "Especial", episodes: 1, universe: "Alternativo", arc: "Universos alternativos", order: 17, color: "blue", description: "O OVA com a Guerra original concebida por Kinoko Nasu, com Ayaka Sajyou e um Saber masculino." },
+  { slug: "carnival", title: "Carnival Phantasm", shortTitle: "Carnival Phantasm", year: "2011–2012", format: "OVA", episodes: 12, universe: "Comédia", arc: "Comédia", order: 18, color: "amber", description: "Paródia oficial com os elencos de Fate/stay night e Tsukihime em esquetes absurdas." },
+  { slug: "prisma-herz", title: "Fate/kaleid liner Prisma☆Illya 2wei Herz!", shortTitle: "Prisma☆Illya Herz!", year: "2015", format: "Série", episodes: 10, universe: "Prisma☆Illya", arc: "Prisma☆Illya", order: 19, color: "violet", description: "A terceira temporada do spin-off magical girl." },
+  { slug: "prisma-3rei", title: "Fate/kaleid liner Prisma☆Illya 3rei!!", shortTitle: "Prisma☆Illya 3rei!!", year: "2016", format: "Série", episodes: 12, universe: "Prisma☆Illya", arc: "Prisma☆Illya", order: 20, color: "violet", description: "A quarta temporada, com a viagem ao mundo de Miyu." },
+  { slug: "prisma-snow", title: "Fate/kaleid liner Prisma☆Illya: Vow in the Snow", shortTitle: "Prisma: Vow in the Snow", year: "2017", format: "Filme", episodes: 1, universe: "Prisma☆Illya", arc: "Prisma☆Illya", order: 21, color: "violet", description: "O passado de Miyu e o juramento de Shirou — o filme mais dramático do spin-off." },
+  { slug: "prisma-licht", title: "Fate/kaleid liner Prisma☆Illya: Licht", shortTitle: "Prisma: Licht", year: "2021", format: "Filme", episodes: 1, universe: "Prisma☆Illya", arc: "Prisma☆Illya", order: 22, color: "violet", description: "A continuação cinematográfica contra a família Ainsworth." },
+  { slug: "prisma-phantasm", title: "Prisma Phantasm", shortTitle: "Prisma Phantasm", year: "2019", format: "OVA", episodes: 1, universe: "Prisma☆Illya", arc: "Prisma☆Illya", order: 23, color: "violet", description: "Episódio especial de comédia com o elenco de Prisma☆Illya." },
+  { slug: "melloi-special", title: "Lord El-Melloi II Special", shortTitle: "El-Melloi II Especial", year: "2021", format: "Especial", episodes: 1, universe: "Alternativo", arc: "Universos alternativos", order: 24, color: "blue", description: "Waver, reencontro e a lanterna mágica — especial de fim de ano." },
+  { slug: "moonlight", title: "Fate/Grand Order: Moonlight/Lostroom", shortTitle: "Grand Order: Moonlight", year: "2017", format: "Especial", episodes: 1, universe: "Grand Order", arc: "Grand Order", order: 25, color: "teal", description: "O prólogo enigmático da jornada da Chaldea, com Mash e o mestre desconhecido." },
 ];
 
 export const CATALOG_ROUTES: CatalogRoute[] = [
@@ -63,10 +74,10 @@ export const CATALOG_ROUTES: CatalogRoute[] = [
   {
     slug: "grand-order",
     name: "Grand Order — Singularidades",
-    description: "Da First Order ao Templo de Salomão.",
+    description: "Do prólogo Moonlight ao Templo de Salomão.",
     universe: "Grand Order",
     isDefault: false,
-    workSlugs: ["first-order", "camelot", "babylonia", "solomon"],
+    workSlugs: ["moonlight", "first-order", "camelot", "babylonia", "solomon"],
   },
   {
     slug: "prisma-illya",
@@ -74,7 +85,7 @@ export const CATALOG_ROUTES: CatalogRoute[] = [
     description: "Spin-off magical girl por ordem de lançamento.",
     universe: "Prisma☆Illya",
     isDefault: false,
-    workSlugs: ["prisma", "prisma-2wei"],
+    workSlugs: ["prisma", "prisma-2wei", "prisma-herz", "prisma-3rei", "prisma-snow", "prisma-licht", "prisma-phantasm"],
   },
   {
     slug: "exploracao-livre",
@@ -103,4 +114,54 @@ export function overallProgress(works: { slug: string; episodes: number }[], pro
   const watched = works.reduce((s, w) => s + clampWatched(w.episodes, progress[w.slug] ?? 0), 0);
   const percent = total === 0 ? 0 : Math.round((watched / total) * 100);
   return { total, watched, percent };
+}
+
+export interface Recommendation {
+  workSlug: string;
+  shortTitle: string;
+  kind: "continue" | "next" | "start";
+  remaining: number;
+  reason: string;
+}
+
+/**
+ * Motor determinístico de recomendação (sem IA): respeita a ordem da rota,
+ * continua o que está a meio, nunca salta pré-requisitos e explica o motivo.
+ */
+export function recommend(
+  works: { slug: string; shortTitle: string; episodes: number; order: number }[],
+  progress: Record<string, number>,
+  limit = 1,
+): Recommendation[] {
+  const ordered = [...works].sort((a, b) => a.order - b.order);
+  const watchedOf = (slug: string, total: number) => clampWatched(total, progress[slug] ?? 0);
+  const out: Recommendation[] = [];
+  for (const w of ordered) {
+    if (out.length >= limit) break;
+    const watched = watchedOf(w.slug, w.episodes);
+    if (watched > 0 && watched < w.episodes) {
+      const remaining = w.episodes - watched;
+      out.push({
+        workSlug: w.slug, shortTitle: w.shortTitle, kind: "continue", remaining,
+        reason: w.episodes === 1
+          ? `Termina ${w.shortTitle} para fechar este capítulo da rota.`
+          : `Continua ${w.shortTitle} — faltam ${remaining} episódio${remaining === 1 ? "" : "s"}.`,
+      });
+    }
+  }
+  for (const w of ordered) {
+    if (out.length >= limit) break;
+    const watched = watchedOf(w.slug, w.episodes);
+    if (watched !== 0) continue;
+    const prevDone = ordered.filter((o) => o.order < w.order).every((o) => watchedOf(o.slug, o.episodes) >= o.episodes);
+    const size = w.episodes === 1 ? "obra única" : `${w.episodes} episódios`;
+    out.push({
+      workSlug: w.slug, shortTitle: w.shortTitle,
+      kind: prevDone ? "next" : "start", remaining: w.episodes,
+      reason: prevDone
+        ? `${w.shortTitle} é o próximo da tua rota — ${size} pela frente.`
+        : `${w.shortTitle} pode ser começado em qualquer altura — ${size}.`,
+    });
+  }
+  return out;
 }

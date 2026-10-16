@@ -179,3 +179,32 @@ export const userLibrary = mysqlTable("user_library", {
 
 export type UserLibrary = typeof userLibrary.$inferSelect;
 export type InsertUserLibrary = typeof userLibrary.$inferInsert;
+
+/** Episódios vistos por utilizador (granularidade individual).
+ * user_progress.watchedEpisodes continua como agregado (= nº de linhas aqui). */
+export const userEpisodeProgress = mysqlTable("user_episode_progress", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull(),
+  episodeId: int("episodeId").notNull(),
+  watchedAt: timestamp("watchedAt").defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex("user_episode_user_episode_unique").on(table.userId, table.episodeId),
+]);
+
+export type UserEpisodeProgress = typeof userEpisodeProgress.$inferSelect;
+export type InsertUserEpisodeProgress = typeof userEpisodeProgress.$inferInsert;
+
+/** Meta pessoal por obra: avaliação, notas e favorito. */
+export const userWorkMeta = mysqlTable("user_work_meta", {
+  userId: int("userId").notNull(),
+  workId: int("workId").notNull(),
+  rating: int("rating"),
+  notes: text("notes"),
+  favorite: boolean("favorite").default(false).notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+}, (table) => [
+  uniqueIndex("user_work_meta_user_work_unique").on(table.userId, table.workId),
+]);
+
+export type UserWorkMeta = typeof userWorkMeta.$inferSelect;
+export type InsertUserWorkMeta = typeof userWorkMeta.$inferInsert;

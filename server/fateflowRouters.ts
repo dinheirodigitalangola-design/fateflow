@@ -8,24 +8,35 @@ import {
   getUserPreferences,
   getUserProgressMap,
   getWorkBySlug,
+  getWorkMeta,
   listActivity,
   listEpisodes,
+  listEpisodesWithProgress,
   listFranchises,
   listLibrary,
   listRoutesWithItems,
   listWorks,
+  markUpToEpisode,
   migrateLocalProgress,
   removeFromLibrary,
   resetAllProgress,
+  setEpisodeWatched,
+  setWorkActive,
   setWorkProgress,
   updateUserPreferences,
+  updateWorkMeta,
+  upsertWork,
+  type AdminWorkInput,
 } from "./fateflowDb";
-import { protectedProcedure, publicProcedure, router } from "./_core/trpc";
+import { adminProcedure, protectedProcedure, publicProcedure, router } from "./_core/trpc";
 
 function dbError(e: unknown): never {
   const msg = e instanceof Error ? e.message : String(e);
   if (msg === "DATABASE_UNAVAILABLE") throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Base de dados indisponível" });
   if (msg === "WORK_NOT_FOUND") throw new TRPCError({ code: "NOT_FOUND", message: "Obra não encontrada" });
+  if (msg === "FRANCHISE_NOT_FOUND") throw new TRPCError({ code: "NOT_FOUND", message: "Franquia não encontrada" });
+  if (msg === "EPISODE_NOT_FOUND") throw new TRPCError({ code: "NOT_FOUND", message: "Episódio não encontrado" });
+  if (msg === "INVALID_RATING") throw new TRPCError({ code: "BAD_REQUEST", message: "Avaliação entre 1 e 5" });
   throw e;
 }
 
@@ -63,6 +74,39 @@ export const libraryRouter = router({
       return dbError(e);
     }
   }),
+});
+
+const episodeNumberSchema = z.number().int().min(1).max(1000);
+
+export const episodesRouter = router({
+  /** Episódios da obra com estado visto/não-visto do utilizador. */
+  list: protectedProcedure.input(z.object({ workSlug: slugSchema })).query(async ({ ctx, input }) => {
+    try {
+      return await listEpisodesWithProgress(ctx.user.id, input.workSlug);
+    } catch (e) {
+      return dbError(e);
+    }
+  }),
+  /** Marca/desmarca um episódio individual. */
+  set: protectedProcedure
+    .input(z.object({ workSlug: slugSchema, episodeNumber: episodeNumberSchema, watched: z.boolean() }))
+    .mutation(async ({ ctx, input }) => {
+      try {
+        return await setEpisodeWatched(ctx.user.id, input.workSlug, input.episodeNumber, input.watched);
+      } catch (e) {
+        return dbError(e);
+      }
+    }),
+  /** Saltar para o episódio N: marca 1..N (desmarca para a frente). N=0 limpa tudo. */
+  markUpTo: protectedProcedure
+    .input(z.object({ workSlug: slugSchema, episodeNumber: z.number().int().min(0).max(1000) }))
+    .mutation(async ({ ctx, input }) => {
+      try {
+        return await markUpToEpisode(ctx.user.id, input.workSlug, input.episodeNumber);
+      } catch (e) {
+        return dbError(e);
+      }
+    }),
 });
 
 export const catalogRouter = router({
@@ -205,6 +249,90 @@ export const activityRouter = router({
       return dbError(e);
     }
   }),
+});
+
+const adminWorkInput = z.object({
+  slug: slugSchema,
+  title: z.string().min(1).max(255),
+  shortTitle: z.string().max(128).optional(),
+  description: z.string().max(5000).optional(),
+  year: z.string().max(32).optional(),
+  format: z.enum(["Série", "Filme", "Especial", "OVA"]),
+  universe: z.string().min(1).max(64),
+  arc: z.string().max(128).optional(),
+  orderIndex: z.number().int().min(0).max(10000),
+  episodeCount: z.number().int().min(1).max(2000),
+  color: z.string().max(32).optional(),
+  badge: z.string().max(128).nullable().optional(),
+  coverUrl: z.string().max(2000).nullable().optional(),
+  franchiseSlug: slugSchema.optional(),
+  isActive: z.boolean().optional(),
+});
+
+/** Administração do catálogo — só role admin. */
+export const adminRouter = router({
+  workUpsert: adminProcedure.input(adminWorkInput).mutation(async ({ input }) => {
+    try {
+      const data: AdminWorkInput = {
+        slug: input.slug,
+        title: input.title,
+        shortTitle: input.shortTitle,
+        description: input.description,
+        year: input.year,
+        format: input.format,
+        universe: input.universe,
+        arc: input.arc,
+        orderIndex: input.orderIndex,
+        episodeCount: input.episodeCount,
+        color: input.color,
+        badge: input.badge,
+        coverUrl: input.coverUrl,
+        franchiseSlug: input.franchiseSlug,
+        isActive: input.isActive,
+      };
+      return await upsertWork(data);
+    } catch (e) {
+      return dbError(e);
+    }
+  }),
+  workSetActive: adminProcedure.input(z.object({ slug: slugSchema, isActive: z.boolean() })).mutation(async ({ input }) => {
+    try {
+      return await setWorkActive(input.slug, input.isActive);
+    } catch (e) {
+      return dbError(e);
+    }
+  }),
+});
+
+/** Meta pessoal por obra: avaliação, notas, favorito. */
+export const metaRouter = router({
+  get: protectedProcedure.input(z.object({ workSlug: slugSchema })).query(async ({ ctx, input }) => {
+    try {
+      return await getWorkMeta(ctx.user.id, input.workSlug);
+    } catch (e) {
+      return dbError(e);
+    }
+  }),
+  update: protectedProcedure
+    .input(
+      z.object({
+        workSlug: slugSchema,
+        rating: z.number().int().min(1).max(5).nullable().optional(),
+        notes: z.string().max(2000).nullable().optional(),
+        favorite: z.boolean().optional(),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      try {
+        return await updateWorkMeta(ctx.user.id, input.workSlug, {
+          rating: input.rating,
+          notes: input.notes,
+          favorite: input.favorite,
+        });
+      } catch (e) {
+        return dbError(e);
+      }
+    }),
 });
 
 export const preferencesRouter = router({

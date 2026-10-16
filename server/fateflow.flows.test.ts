@@ -44,13 +44,13 @@ function userCtx(id: number): TrpcContext {
 }
 
 const EXPECTED_EPISODES = CATALOG_WORKS.reduce((s, w) => s + w.episodes, 0); // 150
-const EXPECTED_ROUTE_ITEMS = CATALOG_ROUTES.reduce((s, r) => s + r.workSlugs.length, 0); // 5+4+2+15
+const EXPECTED_ROUTE_ITEMS = CATALOG_ROUTES.reduce((s, r) => s + r.workSlugs.length, 0); // 5+5+7+26
 
 describe("seed idempotente (2 execuções, sem deletes)", () => {
   it("cria 15 works / N episódios / 4 rotas / 26 itens e repete sem duplicar", async () => {
     const r1 = await seedFateFlow();
-    expect(r1).toEqual({ works: 15, routes: 4, franchises: 1 });
-    expect(fake.store.works).toHaveLength(15);
+    expect(r1).toEqual({ works: 26, routes: 4, franchises: 1 });
+    expect(fake.store.works).toHaveLength(26);
     expect(fake.store.episodes).toHaveLength(EXPECTED_EPISODES);
     expect(fake.store.routes).toHaveLength(4);
     expect(fake.store.route_items).toHaveLength(EXPECTED_ROUTE_ITEMS);
@@ -58,7 +58,7 @@ describe("seed idempotente (2 execuções, sem deletes)", () => {
 
     const snapshot = JSON.stringify(fake.store);
     const r2 = await seedFateFlow();
-    expect(r2).toEqual({ works: 15, routes: 4, franchises: 1 });
+    expect(r2).toEqual({ works: 26, routes: 4, franchises: 1 });
     expect(JSON.stringify(fake.store)).toBe(snapshot);
     expect(fake.stats.deletes).toBe(0);
   });
@@ -159,7 +159,7 @@ describe("wiring tRPC autenticado (com DB mockada)", () => {
     expect((await caller.routes.getActive()).active?.slug).toBe("fuyuki");
 
     const catalog = await caller.catalog.list();
-    expect(catalog.length).toBe(15); // veio da "DB", não do fallback
+    expect(catalog.length).toBe(26); // veio da "DB", não do fallback
     const hist = await caller.activity.list({ limit: 50 });
     expect(hist.length).toBeGreaterThan(0);
     await caller.activity.clear();

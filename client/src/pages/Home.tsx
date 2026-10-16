@@ -11,6 +11,7 @@ import {
   Database,
   Flame,
   Grid2X2,
+  Heart,
   History,
   LayoutDashboard,
   ListFilter,
@@ -35,9 +36,10 @@ import { Button } from "@/components/ui/button";
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { startLogin } from "@/const";
+import { recommend } from "@shared/fateflowCatalog";
 import { toast } from "sonner";
 
-type View = "dashboard" | "catalogo" | "rota" | "historico" | "preferencias" | "perfil";
+type View = "dashboard" | "catalogo" | "rota" | "historico" | "preferencias" | "perfil" | "admin" | "obra";
 type Status = "concluido" | "progresso" | "proximo" | "faltam";
 type Universe = "Fuyuki" | "Grand Order" | "Alternativo" | "Prisma☆Illya" | "Comédia";
 type Work = {
@@ -104,6 +106,8 @@ const NAV_ITEMS: { id: View; label: string; icon: typeof LayoutDashboard }[] = [
   { id: "perfil", label: "Perfil", icon: User },
 ];
 
+const ADMIN_NAV_ITEM: { id: View; label: string; icon: typeof LayoutDashboard } = { id: "admin", label: "Admin", icon: ShieldCheck };
+
 function getStored<T>(key: string, fallback: T): T {
   try { const value = localStorage.getItem(key); return value ? JSON.parse(value) as T : fallback; } catch { return fallback; }
 }
@@ -125,7 +129,10 @@ export default function Home() {
   const { user, loading: authLoading, logout } = useAuth();
   const utils = trpc.useUtils();
   const initialPath = typeof window !== "undefined" ? window.location.pathname.replace(/^\//, "") : "";
-  const initialView: View = initialPath === "catalogo" || initialPath === "rota" || initialPath === "historico" || initialPath === "preferencias" || initialPath === "perfil" ? initialPath : "dashboard";
+  const obraMatch = initialPath.match(/^obra\/([\w-]+)/);
+  const initialView: View = obraMatch ? "obra" : initialPath === "catalogo" || initialPath === "rota" || initialPath === "historico" || initialPath === "preferencias" || initialPath === "perfil" || initialPath === "admin" ? initialPath : "dashboard";
+  const [selectedSlug, setSelectedSlug] = useState<string | null>(obraMatch?.[1] ?? null);
+  const navItems = user?.role === "admin" ? [...NAV_ITEMS, ADMIN_NAV_ITEM] : NAV_ITEMS;
   const [view, setView] = useState<View>(initialView);
   const [mobileMenu, setMobileMenu] = useState(false);
   const [localProgress, setLocalProgress] = useState<Record<string, number>>(() => withoutLegacyDemoProgress(getStored("fateflow-progress", INITIAL_PROGRESS)));
@@ -147,7 +154,7 @@ export default function Home() {
   const catalogQuery = trpc.catalog.list.useQuery(undefined, { retry: false, refetchOnWindowFocus: false });
 
   const markMutation = trpc.progress.markEpisode.useMutation({
-    onSuccess: () => { utils.progress.list.invalidate(); utils.activity.list.invalidate(); },
+    onSuccess: () => { utils.progress.list.invalidate(); utils.activity.list.invalidate(); utils.episodes.list.invalidate(); },
     onError: () => { toast.error("Falha ao gravar na conta", { description: "O progresso local foi mantido." }); },
   });
   const migrateMutation = trpc.progress.migrate.useMutation({
@@ -260,6 +267,16 @@ export default function Home() {
   const totalEpisodes = activeWorks.reduce((sum, work) => sum + work.episodes, 0);
   const watchedEpisodes = enriched.reduce((sum, work) => sum + Math.min(work.progress, work.episodes), 0);
   const mainWorks = enriched.filter(work => work.universe === "Fuyuki");
+  // B1: a timeline segue a rota ativa do servidor; sem dados, cai para Fuyuki.
+  const enrichedById = useMemo(() => new Map(enriched.map((work) => [work.id, work])), [enriched]);
+  const activeRouteData = routesQuery.data?.find((r) => r.name === route) ?? null;
+  const routeWorks = activeRouteData && activeRouteData.items.length > 0
+    ? activeRouteData.items.flatMap((item) => {
+        const found = enrichedById.get(item.work?.slug ?? "");
+        return found ? [found] : [];
+      })
+    : mainWorks;
+  const routeOptions = routesQuery.data?.map((r) => r.name) ?? ["Rota principal — Fuyuki", "Grand Order — Singularidades", "Prisma☆Illya — Ordem completa", "Exploração livre"];
   const current = enriched.find(work => work.status === "progresso") ?? enriched.find(work => work.status === "proximo") ?? enriched[0];
   const overallPercent = Math.round((watchedEpisodes / totalEpisodes) * 100);
   const filteredWorks = enriched.filter(work => {
@@ -283,6 +300,8 @@ export default function Home() {
   };
 
   const navigate = (nextView: View) => { setView(nextView); setMobileMenu(false); window.history.pushState({}, "", nextView === "dashboard" ? "/" : `/${nextView}`); window.scrollTo({ top: 0, behavior: "smooth" }); };
+  const navigateObra = (slug: string) => { setSelectedSlug(slug); setView("obra"); setMobileMenu(false); window.history.pushState({}, "", `/obra/${slug}`); window.scrollTo({ top: 0, behavior: "smooth" }); };
+  const openObraPage = (work: Work) => { setSelectedWork(null); navigateObra(work.id); };
 
   // Sem sessão: página de boas-vindas (sem dados demo, só login Google).
   // Durante a verificação da sessão mostra-se a mesma página em loading,
@@ -300,7 +319,7 @@ export default function Home() {
         </div>
         <div className="rail-section-label">Acompanhar</div>
         <nav className="rail-nav">
-          {NAV_ITEMS.map(item => { const Icon = item.icon; return <button key={item.id} className={`rail-link ${view === item.id ? "active" : ""}`} onClick={() => navigate(item.id)}><Icon size={18} /><span>{item.label}</span>{item.id === "rota" && <b className="nav-count">5</b>}</button>; })}
+          {navItems.map(item => { const Icon = item.icon; return <button key={item.id} className={`rail-link ${view === item.id ? "active" : ""}`} onClick={() => navigate(item.id)}><Icon size={18} /><span>{item.label}</span>{item.id === "rota" && <b className="nav-count">5</b>}</button>; })}
         </nav>
         <div className="rail-divider" />
         <div className="rail-section-label">Atalhos</div>
@@ -312,23 +331,30 @@ export default function Home() {
       <div className="main-area">
         <header className="topbar">
           <button className="mobile-menu-button" onClick={() => setMobileMenu(!mobileMenu)} aria-label="Abrir menu"><Menu size={21} /></button>
-          <div className="breadcrumb"><span>FateFlow</span><ChevronRight size={15} /><strong>{NAV_ITEMS.find(item => item.id === view)?.label ?? "Dashboard"}</strong></div>
+          <div className="breadcrumb"><span>FateFlow</span><ChevronRight size={15} /><strong>{navItems.find(item => item.id === view)?.label ?? (view === "obra" ? "Obra" : "Dashboard")}</strong></div>
           <div className="topbar-actions"><button className="top-icon" aria-label="Ajuda"><CircleHelp size={19} /></button><button className="top-icon has-dot" aria-label="Notificações"><Zap size={18} /></button><button className="avatar" title={`${user.name ?? user.email ?? "Conta ligada"} — abrir perfil`} onClick={() => navigate("perfil")}>{(user.name ?? user.email ?? "FF").slice(0, 2).toUpperCase()}</button></div>
         </header>
 
         <main className="page-content">
-          {view === "dashboard" && <Dashboard current={current} enriched={enriched} overallPercent={overallPercent} watchedEpisodes={watchedEpisodes} totalEpisodes={totalEpisodes} activity={activity} onContinue={() => setSelectedWork(current)} onNavigate={navigate} onMark={() => updateProgress(current, (progress[current.id] ?? 0) + 1)} />}
-          {view === "catalogo" && <Catalog filteredWorks={filteredWorks} search={search} setSearch={setSearch} filter={filter} setFilter={setFilter} catalogMode={catalogMode} setCatalogMode={setCatalogMode} onSelect={setSelectedWork} progress={progress} />}
-          {view === "rota" && <RouteView works={mainWorks} route={route} setRoute={handleRouteChange} onSelect={setSelectedWork} progress={progress} onMark={updateProgress} />}
+          {view === "dashboard" && <Dashboard current={current} enriched={enriched} routeWorks={routeWorks} smart={smart} overallPercent={overallPercent} watchedEpisodes={watchedEpisodes} totalEpisodes={totalEpisodes} activity={activity} onContinue={() => setSelectedWork(current)} onSelect={setSelectedWork} onNavigate={navigate} onMark={() => updateProgress(current, (progress[current.id] ?? 0) + 1)} />}
+          {view === "catalogo" && <Catalog filteredWorks={filteredWorks} enriched={enriched} search={search} setSearch={setSearch} filter={filter} setFilter={setFilter} catalogMode={catalogMode} setCatalogMode={setCatalogMode} onSelect={setSelectedWork} progress={progress} />}
+          {view === "rota" && <RouteView works={routeWorks} route={route} options={routeOptions} setRoute={handleRouteChange} onSelect={setSelectedWork} progress={progress} onMark={updateProgress} />}
           {view === "historico" && <HistoryView activity={activity} onClear={handleClearHistory} />}
-          {view === "preferencias" && <Preferences route={route} setRoute={handleRouteChange} smart={smart} compact={compact} onSmartChange={handleSmartChange} onCompactChange={handleCompactChange} onReset={handleResetAll} />}
+          {view === "preferencias" && <Preferences route={route} options={routeOptions} setRoute={handleRouteChange} smart={smart} compact={compact} onSmartChange={handleSmartChange} onCompactChange={handleCompactChange} onReset={handleResetAll} />}
           {view === "perfil" && <ProfileView user={user} overallPercent={overallPercent} watchedEpisodes={watchedEpisodes} totalEpisodes={totalEpisodes} doneCount={enriched.filter(work => work.status === "concluido").length} activityCount={activity.length} onOpenPreferences={() => navigate("preferencias")} onLogout={async () => { await logout(); navigate("dashboard"); }} />}
+          {view === "admin" && (user?.role === "admin" ? <AdminView /> : <div className="empty-state"><ShieldCheck size={28} /><h3>Sem permissão</h3><p>Esta zona é só para administradores.</p></div>)}
+          {view === "obra" && (() => {
+            const obra = enriched.find((w) => w.id === selectedSlug);
+            if (!obra) return <div className="empty-state"><Search size={28} /><h3>Obra não encontrada</h3><p>Volta ao catálogo e escolhe outra.</p><button onClick={() => navigate("catalogo")}>Abrir catálogo</button></div>;
+            const idx = routeWorks.findIndex((w) => w.id === obra.id);
+            return <ObraView work={obra} progress={progress[obra.id] ?? 0} related={enriched.filter((w) => w.universe === obra.universe && w.id !== obra.id).slice(0, 4)} prev={idx > 0 ? routeWorks[idx - 1] : null} next={idx >= 0 && idx < routeWorks.length - 1 ? routeWorks[idx + 1] : null} activity={activity.filter((a) => a.title === obra.shortTitle)} onMarkNext={() => updateProgress(obra, (progress[obra.id] ?? 0) + 1)} onOpenWork={navigateObra} onBack={() => navigate("catalogo")} />;
+          })()}
         </main>
       </div>
 
-      <nav className="mobile-nav">{NAV_ITEMS.slice(0, 4).map(item => { const Icon = item.icon; return <button key={item.id} className={view === item.id ? "active" : ""} onClick={() => navigate(item.id)}><Icon size={19} /><span>{item.label === "Dashboard" ? "Início" : item.label.split(" ")[0]}</span></button>; })}</nav>
+      <nav className="mobile-nav">{navItems.slice(0, 4).map(item => { const Icon = item.icon; return <button key={item.id} className={view === item.id ? "active" : ""} onClick={() => navigate(item.id)}><Icon size={19} /><span>{item.label === "Dashboard" ? "Início" : item.label.split(" ")[0]}</span></button>; })}</nav>
 
-      {selectedWork && <WorkSheet work={selectedWork} progress={progress[selectedWork.id] ?? 0} onClose={() => setSelectedWork(null)} onUpdate={(value) => updateProgress(selectedWork, value)} />}
+      {selectedWork && <WorkSheet work={selectedWork} progress={progress[selectedWork.id] ?? 0} onClose={() => setSelectedWork(null)} onOpenPage={openObraPage} onUpdate={(value) => updateProgress(selectedWork, value)} />}
     </div>
   );
 }
@@ -356,7 +382,7 @@ function Welcome({ loading, onLogin }: { loading: boolean; onLogin: () => void }
             <div className="hero-glow" /><div className="hero-sigil"><span>F</span><i /><b>✦</b></div>
             <div className="hero-content">
               <div className="hero-kicker">COMEÇA AQUI</div>
-              <h2>15 obras · 4 rotas · {totalItems} episódios e filmes</h2>
+              <h2>{WORKS.length} obras · 4 rotas · {totalItems} episódios e filmes</h2>
               <p>Da porta de entrada Unlimited Blade Works ao clímax de Solomon — sempre a saber o que ver a seguir.</p>
               <div className="hero-actions">
                 <button className="hero-play" onClick={onLogin} disabled={loading}><LogIn size={17} /> {loading ? "A ligar..." : "Continuar com Google"}</button>
@@ -373,8 +399,14 @@ function Welcome({ loading, onLogin }: { loading: boolean; onLogin: () => void }
   );
 }
 
-function Dashboard({ current, enriched, overallPercent, watchedEpisodes, totalEpisodes, activity, onContinue, onNavigate, onMark }: { current: Work & { progress: number; status: Status }; enriched: (Work & { progress: number; status: Status })[]; overallPercent: number; watchedEpisodes: number; totalEpisodes: number; activity: Activity[]; onContinue: () => void; onNavigate: (view: View) => void; onMark: () => void }) {
+function Dashboard({ current, enriched, routeWorks, smart, overallPercent, watchedEpisodes, totalEpisodes, activity, onContinue, onSelect, onNavigate, onMark }: { current: Work & { progress: number; status: Status }; enriched: (Work & { progress: number; status: Status })[]; routeWorks: (Work & { progress: number; status: Status })[]; smart: boolean; overallPercent: number; watchedEpisodes: number; totalEpisodes: number; activity: Activity[]; onContinue: () => void; onSelect: (work: Work) => void; onNavigate: (view: View) => void; onMark: () => void }) {
   const doneMain = enriched.filter(work => work.universe === "Fuyuki" && work.status === "concluido").length;
+  const progressMap = Object.fromEntries(enriched.map((work) => [work.id, work.progress]));
+  const rec = recommend(
+    routeWorks.map((work) => ({ slug: work.id, shortTitle: work.shortTitle, episodes: work.episodes, order: work.order })),
+    progressMap,
+  )[0] ?? null;
+  const recWork = rec ? enriched.find((work) => work.id === rec.workSlug) ?? null : null;
   return <>
     <section className="page-heading"><div><div className="eyebrow"><Sparkles size={14} /> ARQUIVO PESSOAL · ROTA FUYUKI</div><h1>Boa noite<span className="heading-dot">.</span></h1><p>O próximo capítulo está à sua espera. Continue a sua jornada pelo Graal.</p></div><div className="heading-actions"><button className="soft-button"><Star size={16} /> {watchedEpisodes > 0 ? "3 dias seguidos" : "Começa hoje"}</button><button className="primary-button" onClick={onContinue}><Play size={16} fill="currentColor" /> Continuar</button></div></section>
     <section className="hero-card">
@@ -389,14 +421,16 @@ function Dashboard({ current, enriched, overallPercent, watchedEpisodes, totalEp
       <Metric icon={<Clock3 />} label="Tempo estimado" value="18h 40m" detail="para terminar a rota" accent="violet" />
     </section>
     <div className="content-grid dashboard-grid">
-      <section className="panel next-panel"><div className="panel-head"><div><div className="eyebrow">ORDEM DA SUA ROTA</div><h2>Próximos capítulos</h2></div><button className="text-button" onClick={() => onNavigate("rota")}>Ver rota completa <ArrowRight size={15} /></button></div><div className="next-list">{enriched.filter(work => work.universe === "Fuyuki").slice(0, 4).map((work, index) => <WorkRow key={work.id} work={work} rank={index + 1} onClick={() => onContinue()} />)}</div></section>
+      <section className="panel next-panel"><div className="panel-head"><div><div className="eyebrow">ORDEM DA SUA ROTA</div><h2>Próximos capítulos</h2></div><button className="text-button" onClick={() => onNavigate("rota")}>Ver rota completa <ArrowRight size={15} /></button></div><div className="next-list">{enriched.filter(work => work.universe === "Fuyuki").slice(0, 4).map((work, index) => <WorkRow key={work.id} work={work} rank={index + 1} onClick={() => onSelect(work)} />)}</div></section>
       <section className="panel activity-panel"><div className="panel-head"><div><div className="eyebrow">REGISTRO RECENTE</div><h2>Última atividade</h2></div><button className="icon-quiet" onClick={() => onNavigate("historico")}><ArrowRight size={17} /></button></div><div className="activity-list">{activity.slice(0, 3).map(item => <ActivityRow key={item.id} item={item} />)}</div><button className="panel-footer-button" onClick={() => onNavigate("historico")}>Abrir histórico completo <ChevronRight size={15} /></button></section>
     </div>
-    {watchedEpisodes === 0 ? (
+    {smart && (watchedEpisodes === 0 ? (
       <section className="smart-tip"><div className="tip-icon"><Sparkles size={18} /></div><div><strong>O teu arquivo está vazio</strong><p>Abre uma obra no catálogo e marca o primeiro episódio — o FateFlow trata do resto.</p></div><button onClick={() => onNavigate("catalogo")}>Abrir catálogo <ArrowRight size={15} /></button></section>
+    ) : rec && recWork ? (
+      <section className="smart-tip"><div className="tip-icon"><Sparkles size={18} /></div><div><strong>Sugestão do FateFlow</strong><p>{rec.reason}</p></div><button onClick={() => onSelect(recWork)}>Ver sugestão <ArrowRight size={15} /></button></section>
     ) : (
-      <section className="smart-tip"><div className="tip-icon"><Sparkles size={18} /></div><div><strong>Sugestão do FateFlow</strong><p>Está a 2 episódios de fechar o seu primeiro arco. Uma sessão de 48 min leva-o diretamente ao confronto final de Unlimited Blade Works.</p></div><button onClick={onContinue}>Ver sugestão <ArrowRight size={15} /></button></section>
-    )}
+      <section className="smart-tip"><div className="tip-icon"><Sparkles size={18} /></div><div><strong>Rota concluída</strong><p>Terminaste esta rota. Explora outra no catálogo ou revê as tuas favoritas.</p></div><button onClick={() => onNavigate("catalogo")}>Abrir catálogo <ArrowRight size={15} /></button></section>
+    ))}
   </>;
 }
 
@@ -406,25 +440,35 @@ function WorkRow({ work, rank, onClick }: { work: Work & { progress: number; sta
 
 function ActivityRow({ item }: { item: Activity }) { return <div className="activity-row"><div className={`activity-icon ${item.kind}`}>{item.kind === "episode" ? <Play size={13} fill="currentColor" /> : item.kind === "goal" ? <Target size={14} /> : <Check size={14} />}</div><div><strong>{item.title}</strong><span>{item.detail}</span></div><time>{item.date}</time></div>; }
 
-function Catalog({ filteredWorks, search, setSearch, filter, setFilter, catalogMode, setCatalogMode, onSelect, progress }: { filteredWorks: (Work & { progress: number; status: Status })[]; search: string; setSearch: (value: string) => void; filter: string; setFilter: (value: "todos" | Universe | Status) => void; catalogMode: "list" | "map"; setCatalogMode: (mode: "list" | "map") => void; onSelect: (work: Work) => void; progress: Record<string, number> }) { return <>
-  <section className="page-heading compact"><div><div className="eyebrow"><BookOpen size={14} /> BIBLIOTECA COMPLETA</div><h1>Catálogo Fate<span className="heading-dot">.</span></h1><p>Pesquise, filtre e abra qualquer obra do arquivo.</p></div><div className="view-toggle"><button className={catalogMode === "list" ? "active" : ""} onClick={() => setCatalogMode("list")}><ListFilter size={16} /> Lista</button><button className={catalogMode === "map" ? "active" : ""} onClick={() => setCatalogMode("map")}><Grid2X2 size={16} /> Mapa</button></div></section>
-  <div className="catalog-toolbar"><label className="search-field"><Search size={18} /><input value={search} onChange={event => setSearch(event.target.value)} placeholder="Pesquisar obra, universo ou rota..." /><kbd>⌘ K</kbd></label><div className="filter-pills"><button className={filter === "todos" ? "active" : ""} onClick={() => setFilter("todos")}>Todos <span>{WORKS.length}</span></button>{(["Fuyuki", "Grand Order", "Alternativo", "Prisma☆Illya", "Comédia"] as const).map(value => <button key={value} className={filter === value ? "active" : ""} onClick={() => setFilter(value)}>{value}</button>)}</div></div>
-  {catalogMode === "map" ? <CatalogMap onSelect={onSelect} progress={progress} /> : <section className="catalog-grid">{filteredWorks.length ? filteredWorks.map(work => <CatalogCard key={work.id} work={work} onSelect={() => onSelect(work)} />) : <div className="empty-state"><Search size={28} /><h3>Nenhuma obra encontrada</h3><p>Tente outro título, universo ou remova os filtros.</p><button onClick={() => { setSearch(""); setFilter("todos"); }}>Limpar filtros</button></div>}</section>}
+function Catalog({ filteredWorks, enriched, search, setSearch, filter, setFilter, catalogMode, setCatalogMode, onSelect, progress }: { filteredWorks: (Work & { progress: number; status: Status })[]; enriched: (Work & { progress: number; status: Status })[]; search: string; setSearch: (value: string) => void; filter: string; setFilter: (value: "todos" | Universe | Status) => void; catalogMode: "list" | "map"; setCatalogMode: (mode: "list" | "map") => void; onSelect: (work: Work) => void; progress: Record<string, number> }) { return <>
+  <section className="page-heading compact"><div><div className="eyebrow"><BookOpen size={14} /> BIBLIOTECA COMPLETA</div><h1>Catálogo Fate<span className="heading-dot">.</span></h1><p>Pesquise, filtre e abra qualquer obra do arquivo.</p></div><div className="view-toggle"><button className={catalogMode === "list" ? "active" : ""} aria-pressed={catalogMode === "list"} onClick={() => setCatalogMode("list")}><ListFilter size={16} /> Lista</button><button className={catalogMode === "map" ? "active" : ""} aria-pressed={catalogMode === "map"} onClick={() => setCatalogMode("map")}><Grid2X2 size={16} /> Mapa</button></div></section>
+  <div className="catalog-toolbar"><label className="search-field"><Search size={18} /><input value={search} onChange={event => setSearch(event.target.value)} placeholder="Pesquisar obra, universo ou rota..." aria-label="Pesquisar obra, universo ou rota" /><kbd>⌘ K</kbd></label><div className="filter-pills"><button className={filter === "todos" ? "active" : ""} onClick={() => setFilter("todos")}>Todos <span>{WORKS.length}</span></button>{(["Fuyuki", "Grand Order", "Alternativo", "Prisma☆Illya", "Comédia"] as const).map(value => <button key={value} className={filter === value ? "active" : ""} onClick={() => setFilter(value)}>{value}</button>)}{([["proximo", "Próximo"], ["progresso", "Em progresso"], ["concluido", "Assistido"], ["faltam", "Em falta"]] as const).map(([value, label]) => <button key={value} className={filter === value ? "active" : ""} onClick={() => setFilter(value)}>{label}</button>)}</div></div>
+  {catalogMode === "map" ? <CatalogMap works={enriched} onSelect={onSelect} progress={progress} /> : <section className="catalog-grid">{filteredWorks.length ? filteredWorks.map(work => <CatalogCard key={work.id} work={work} onSelect={() => onSelect(work)} />) : <div className="empty-state"><Search size={28} /><h3>Nenhuma obra encontrada</h3><p>Tente outro título, universo ou remova os filtros.</p><button onClick={() => { setSearch(""); setFilter("todos"); }}>Limpar filtros</button></div>}</section>}
 </>; }
 
 function CatalogCard({ work, onSelect }: { work: Work & { progress: number; status: Status }; onSelect: () => void }) { const percent = Math.round((work.progress / work.episodes) * 100); return <button className="catalog-card" onClick={onSelect}><div className={`catalog-art ${work.color}`}><div className="art-stars">✦ · ✧</div><strong>{getInitials(work.title)}</strong><span>{work.universe}</span><div className="art-orbit" /></div><div className="catalog-copy"><div className="card-topline"><span className={`status-chip ${work.status}`}>{statusLabel(work.status)}</span><span>{work.year}</span></div><h3>{work.shortTitle}</h3><p>{work.format} · {work.episodes} {work.episodes === 1 ? "item" : "episódios"}</p><div className="card-progress"><div><i style={{ width: `${percent}%` }} /></div><span>{percent}%</span></div></div><ChevronRight className="catalog-arrow" size={18} /></button>; }
 
-function CatalogMap({ onSelect, progress }: { onSelect: (work: Work) => void; progress: Record<string, number> }) { const groups = [{ name: "Rota principal", universe: "Fuyuki" as Universe, color: "crimson" }, { name: "Grand Order", universe: "Grand Order" as Universe, color: "teal" }, { name: "Universos alternativos", universe: "Alternativo" as Universe, color: "blue" }]; return <section className="map-panel"><div className="map-intro"><div><div className="eyebrow">NAVEGAÇÃO POR RELAÇÕES</div><h2>O arquivo em forma de mapa</h2><p>A faixa vermelha é o caminho recomendado. Os outros ramos podem ser explorados livremente.</p></div><div className="map-legend"><span className="dot red" /> rota principal <span className="dot blue" /> alternativos <span className="dot teal" /> Grand Order</div></div><div className="constellation-map"><div className="map-center"><span>F</span><small>FATEFLOW</small></div>{groups.map((group, groupIndex) => <div key={group.name} className={`map-branch branch-${groupIndex}`}><div className={`branch-line ${group.color}`} /><div className="branch-head"><span className={`branch-orb ${group.color}`}>{groupIndex + 1}</span><strong>{group.name}</strong><small>{WORKS.filter(work => work.universe === group.universe).length} obras</small></div><div className="branch-works">{WORKS.filter(work => work.universe === group.universe).map(work => { const pct = Math.round(((progress[work.id] ?? 0) / work.episodes) * 100); return <button key={work.id} onClick={() => onSelect(work)}><span className={`mini-cover ${work.color}`}>{getInitials(work.title)}</span><span><b>{work.shortTitle}</b><small>{work.format} · {pct}%</small></span><ChevronRight size={15} /></button>; })}</div></div>)}</div><div className="map-reference"><img src="/fate-map-reference.png" alt="Mapa visual original da franquia Fate" /><div><strong>Mapa de referência</strong><p>Consulte a visão geral original sempre que quiser relembrar as ramificações.</p></div></div></section>; }
+function CatalogMap({ works, onSelect, progress }: { works: (Work & { progress: number; status: Status })[]; onSelect: (work: Work) => void; progress: Record<string, number> }) {
+  const UNIVERSE_META: { universe: Universe; name: string; color: string }[] = [
+    { universe: "Fuyuki", name: "Rota principal", color: "crimson" },
+    { universe: "Grand Order", name: "Grand Order", color: "teal" },
+    { universe: "Alternativo", name: "Universos alternativos", color: "blue" },
+    { universe: "Prisma☆Illya", name: "Prisma☆Illya", color: "violet" },
+    { universe: "Comédia", name: "Comédia", color: "amber" },
+  ];
+  const groups = UNIVERSE_META.filter((g) => works.some((work) => work.universe === g.universe));
+  return <section className="map-panel"><div className="map-intro"><div><div className="eyebrow">NAVEGAÇÃO POR RELAÇÕES</div><h2>O arquivo em forma de mapa</h2><p>A faixa vermelha é o caminho recomendado. Os outros ramos podem ser explorados livremente.</p></div><div className="map-legend"><span className="dot red" /> rota principal <span className="dot blue" /> alternativos <span className="dot teal" /> Grand Order</div></div><div className="constellation-map"><div className="map-center"><span>F</span><small>FATEFLOW</small></div>{groups.map((group, groupIndex) => <div key={group.name} className={`map-branch branch-${groupIndex}`}><div className={`branch-line ${group.color}`} /><div className="branch-head"><span className={`branch-orb ${group.color}`}>{groupIndex + 1}</span><strong>{group.name}</strong><small>{works.filter(work => work.universe === group.universe).length} obras</small></div><div className="branch-works">{works.filter(work => work.universe === group.universe).map(work => { const pct = Math.round(((progress[work.id] ?? 0) / work.episodes) * 100); return <button key={work.id} onClick={() => onSelect(work)}><span className={`mini-cover ${work.color}`}>{getInitials(work.title)}</span><span><b>{work.shortTitle}</b><small>{work.format} · {pct}%</small></span><ChevronRight size={15} /></button>; })}</div></div>)}</div><div className="map-reference"><img src="/fate-map-reference.png" alt="Mapa visual original da franquia Fate" /><div><strong>Mapa de referência</strong><p>Consulte a visão geral original sempre que quiser relembrar as ramificações.</p></div></div></section>;
+}
 
-function RouteView({ works, route, setRoute, onSelect, progress, onMark }: { works: (Work & { progress: number; status: Status })[]; route: string; setRoute: (value: string) => void; onSelect: (work: Work) => void; progress: Record<string, number>; onMark: (work: Work, value: number) => void }) { const done = works.filter(work => work.status === "concluido").length; const current = works.find(work => work.status === "progresso") ?? works.find(work => work.status === "proximo")!; return <>
-  <section className="page-heading compact"><div><div className="eyebrow"><Compass size={14} /> A SUA JORNADA</div><h1>Minha rota<span className="heading-dot">.</span></h1><p>Uma linha do tempo viva — cada marca abre o próximo portal.</p></div><select className="route-select" value={route} onChange={event => setRoute(event.target.value)}><option>Rota principal — Fuyuki</option><option>Grand Order — Singularidades</option><option>Prisma☆Illya — Ordem completa</option></select></section>
-  <section className="route-summary"><div className="route-emblem"><Compass size={27} /></div><div><span>ROTA ATUAL</span><h2>{route}</h2><p>{done} de {works.length} obras concluídas · Próximo objetivo: {current?.shortTitle}</p></div><div className="route-summary-progress"><strong>{Math.round((works.reduce((sum, work) => sum + Math.min(work.progress, work.episodes), 0) / works.reduce((sum, work) => sum + work.episodes, 0)) * 100)}%</strong><span>explorado</span></div></section>
+function RouteView({ works, route, options, setRoute, onSelect, progress, onMark }: { works: (Work & { progress: number; status: Status })[]; route: string; options: string[]; setRoute: (value: string) => void; onSelect: (work: Work) => void; progress: Record<string, number>; onMark: (work: Work, value: number) => void }) { const done = works.filter(work => work.status === "concluido").length; const current = works.find(work => work.status === "progresso") ?? works.find(work => work.status === "proximo"); return <>
+  <section className="page-heading compact"><div><div className="eyebrow"><Compass size={14} /> A SUA JORNADA</div><h1>Minha rota<span className="heading-dot">.</span></h1><p>Uma linha do tempo viva — cada marca abre o próximo portal.</p></div><select className="route-select" value={route} onChange={event => setRoute(event.target.value)}>{options.map((name) => <option key={name}>{name}</option>)}</select></section>
+  <section className="route-summary"><div className="route-emblem"><Compass size={27} /></div><div><span>ROTA ATUAL</span><h2>{route}</h2><p>{done} de {works.length} obras concluídas{current ? ` · Próximo objetivo: ${current.shortTitle}` : ""}</p></div><div className="route-summary-progress"><strong>{(() => { const total = works.reduce((sum, work) => sum + work.episodes, 0); if (total === 0) return 0; return Math.round((works.reduce((sum, work) => sum + Math.min(work.progress, work.episodes), 0) / total) * 100); })()}%</strong><span>explorado</span></div></section>
   <section className="route-timeline">{works.map((work, index) => <div className={`timeline-item ${work.status}`} key={work.id}><div className="timeline-rail"><span>{work.status === "concluido" ? <Check size={15} /> : String(index + 1).padStart(2, "0")}</span></div><button className="timeline-card" onClick={() => onSelect(work)}><div className={`timeline-art ${work.color}`}>{work.status === "concluido" ? <Check size={24} /> : <span>{getInitials(work.title)}</span>}</div><div className="timeline-copy"><div><span className={`status-chip ${work.status}`}>{statusLabel(work.status)}</span><span className="timeline-format">{work.format} · {work.year}</span></div><h3>{work.title}</h3><p>{work.description}</p><div className="timeline-progress"><div><i style={{ width: `${Math.round((work.progress / work.episodes) * 100)}%` }} /></div><span>{work.progress}/{work.episodes}</span></div></div><ChevronRight size={18} /></button>{work.status === "progresso" && <button className="timeline-quick" onClick={(event) => { event.stopPropagation(); onMark(work, work.progress + 1); }}><Plus size={14} /> marcar próximo</button>}</div>)}</section>
 </>; }
 
 function HistoryView({ activity, onClear }: { activity: Activity[]; onClear: () => void }) { return <><section className="page-heading compact"><div><div className="eyebrow"><History size={14} /> REGISTRO DE JORNADA</div><h1>Histórico<span className="heading-dot">.</span></h1><p>Tudo o que marcou no seu arquivo, numa só linha do tempo.</p></div>{activity.length > 0 && <button className="soft-button" onClick={onClear}><X size={15} /> Limpar histórico</button>}</section><section className="history-panel"><div className="history-summary"><div><strong>{activity.length}</strong><span>ações recentes</span></div><div><strong>3</strong><span>dias seguidos</span></div><div><strong>64%</strong><span>ritmo semanal</span></div></div><div className="history-list">{activity.length ? activity.map(item => <div className="history-item" key={item.id}><div className={`history-marker ${item.kind}`} /> <div className="history-date">{item.date}</div><div className="history-detail"><strong>{item.title}</strong><span>{item.detail}</span></div><button className="icon-quiet"><ChevronRight size={17} /></button></div>) : <div className="empty-state"><History size={28} /><h3>O seu histórico está limpo</h3><p>Quando marcar um episódio, a atividade aparece aqui.</p></div>}</div></section></>; }
 
-function ProfileView({ user, overallPercent, watchedEpisodes, totalEpisodes, doneCount, activityCount, onOpenPreferences, onLogout }: { user: { name?: string | null; email?: string | null; loginMethod?: string | null; createdAt?: Date | string; lastSignedIn?: Date | string }; overallPercent: number; watchedEpisodes: number; totalEpisodes: number; doneCount: number; activityCount: number; onOpenPreferences: () => void; onLogout: () => void }) {
+function ProfileView({ user, overallPercent, watchedEpisodes, totalEpisodes, doneCount, activityCount, onOpenPreferences, onLogout }: { user: { openId?: string; name?: string | null; email?: string | null; loginMethod?: string | null; createdAt?: Date | string; lastSignedIn?: Date | string }; overallPercent: number; watchedEpisodes: number; totalEpisodes: number; doneCount: number; activityCount: number; onOpenPreferences: () => void; onLogout: () => void }) {
   const initials = (user.name ?? user.email ?? "FF").slice(0, 2).toUpperCase();
   const memberSince = user.createdAt ? new Date(user.createdAt).toLocaleDateString("pt-BR") : "—";
   const lastSeen = user.lastSignedIn ? new Date(user.lastSignedIn).toLocaleString("pt-BR") : "—";
@@ -437,14 +481,144 @@ function ProfileView({ user, overallPercent, watchedEpisodes, totalEpisodes, don
       <Metric icon={<History />} label="Ações registadas" value={`${activityCount}`} detail="no histórico" accent="violet" />
     </section>
     <section className="settings-layout">
-      <div className="settings-card"><div className="settings-title"><div className="settings-icon"><ShieldCheck size={18} /></div><div><h2>Sessão e conta</h2><p>Membro desde {memberSince} · última visita {lastSeen}.</p></div></div><div className="settings-field"><button className="soft-button" onClick={onOpenPreferences}><Settings2 size={15} /> Abrir preferências</button></div></div>
+      <div className="settings-card"><div className="settings-title"><div className="settings-icon"><ShieldCheck size={18} /></div><div><h2>Sessão e conta</h2><p>Membro desde {memberSince} · última visita {lastSeen}.</p></div></div><div className="settings-field"><label>ID da conta (para o administrador)</label><input className="admin-input" readOnly value={user.openId ?? ""} onFocus={(e) => e.target.select()} /></div><div className="settings-field"><button className="soft-button" onClick={onOpenPreferences}><Settings2 size={15} /> Abrir preferências</button></div></div>
       <div className="settings-card danger-card"><div className="settings-title"><div className="settings-icon"><LogOut size={18} /></div><div><h2>Terminar sessão</h2><p>O progresso fica guardado na tua conta para a próxima visita.</p></div></div><button className="danger-button" onClick={onLogout}>Sair da conta</button></div>
     </section>
   </>;
 }
 
-function Preferences({ route, setRoute, smart, compact, onSmartChange, onCompactChange, onReset }: { route: string; setRoute: (value: string) => void; smart: boolean; compact: boolean; onSmartChange: (value: boolean) => void; onCompactChange: (value: boolean) => void; onReset: () => void }) { return <><section className="page-heading compact"><div><div className="eyebrow"><Settings2 size={14} /> CONTROLO DO ARQUIVO</div><h1>Preferências<span className="heading-dot">.</span></h1><p>Afine a experiência ao seu ritmo de visualização.</p></div></section><section className="settings-layout"><div className="settings-card"><div className="settings-title"><div className="settings-icon"><Compass size={18} /></div><div><h2>Rota principal</h2><p>Escolha a jornada que aparece no dashboard.</p></div></div><div className="settings-field"><label>Ordem de visualização</label><select value={route} onChange={event => setRoute(event.target.value)}><option>Rota principal — Fuyuki</option><option>Grand Order — Singularidades</option><option>Prisma☆Illya — Ordem completa</option></select></div></div><div className="settings-card"><div className="settings-title"><div className="settings-icon"><Sparkles size={18} /></div><div><h2>Assistente FateFlow</h2><p>Pequenas sugestões baseadas no seu progresso.</p></div></div><SettingToggle label="Recomendações inteligentes" description="Sugerir o próximo título e sessões curtas." checked={smart} onChange={onSmartChange} /><SettingToggle label="Modo compacto" description="Mostrar mais itens por ecrã no catálogo." checked={compact} onChange={onCompactChange} /></div><div className="settings-card danger-card"><div className="settings-title"><div className="settings-icon"><Database size={18} /></div><div><h2>Dados do arquivo</h2><p>O progresso fica guardado na tua conta e sincroniza entre dispositivos.</p></div></div><button className="danger-button" onClick={onReset}>Repor progresso inicial</button></div></section></>; }
+function AdminView() {
+  const utils = trpc.useUtils();
+  const catalogQ = trpc.catalog.list.useQuery(undefined, { refetchOnWindowFocus: false });
+  const franchisesQ = trpc.franchises.list.useQuery(undefined, { refetchOnWindowFocus: false });
+  const [slug, setSlug] = useState("");
+  const [form, setForm] = useState({ title: "", shortTitle: "", year: "", format: "Série", universe: "Fuyuki", arc: "", orderIndex: 0, episodeCount: 1, color: "blue", badge: "", franchiseSlug: "fate", isActive: true, description: "", coverUrl: "" });
+  const set = (k: string, v: string | number | boolean) => setForm((prev) => ({ ...prev, [k]: v }));
+  const upsert = trpc.admin.workUpsert.useMutation({
+    onSuccess: () => { utils.catalog.list.invalidate(); toast.success("Obra guardada no catálogo"); },
+    onError: () => { toast.error("Falha ao guardar obra"); },
+  });
+  const setActive = trpc.admin.workSetActive.useMutation({ onSuccess: () => { utils.catalog.list.invalidate(); } });
+  const pick = (s: string) => {
+    setSlug(s);
+    const row = catalogQ.data?.find((w) => w.slug === s);
+    if (!row) return;
+    setForm({
+      title: row.title ?? "", shortTitle: row.shortTitle ?? "", year: row.year ?? "",
+      format: (row.format as string) ?? "Série", universe: (row.universe as string) ?? "Fuyuki",
+      arc: (row.arc as string) ?? "", orderIndex: Number(row.orderIndex ?? 0),
+      episodeCount: Number((row as { episodeCount?: number }).episodeCount ?? 1),
+      color: (row.color as string) ?? "blue", badge: (row.badge as string) ?? "",
+      franchiseSlug: ((row as { franchiseSlug?: string | null }).franchiseSlug ?? "fate"),
+      isActive: (row.isActive as boolean) ?? true,
+      description: (row.description as string) ?? "", coverUrl: ((row as { coverUrl?: string | null }).coverUrl ?? ""),
+    });
+  };
+  const save = () => {
+    if (!slug.trim() || !form.title.trim()) { toast.error("Slug e título são obrigatórios"); return; }
+    upsert.mutate({
+      slug: slug.trim(), title: form.title.trim(), shortTitle: form.shortTitle || undefined,
+      description: form.description || undefined, year: form.year || undefined,
+      format: form.format as "Série" | "Filme" | "Especial" | "OVA", universe: form.universe,
+      arc: form.arc || undefined, orderIndex: Number(form.orderIndex) || 0,
+      episodeCount: Math.max(1, Number(form.episodeCount) || 1), color: form.color || undefined,
+      badge: form.badge || null, coverUrl: form.coverUrl || null,
+      franchiseSlug: form.franchiseSlug || undefined, isActive: form.isActive,
+    });
+  };
+  const rows = catalogQ.data ?? [];
+  return <>
+    <section className="page-heading compact"><div><div className="eyebrow"><ShieldCheck size={14} /> ADMINISTRAÇÃO</div><h1>Catálogo<span className="heading-dot">.</span></h1><p>{rows.length} obras · só visível para administradores.</p></div></section>
+    <section className="settings-layout">
+      <div className="settings-card"><div className="settings-title"><div className="settings-icon"><BookOpen size={18} /></div><div><h2>Editar obra</h2><p>Escolhe uma obra ou cria com um slug novo.</p></div></div>
+        <div className="settings-field"><label>Obra</label><select value={slug} onChange={(e) => pick(e.target.value)}><option value="">— Nova obra —</option>{rows.map((w) => <option key={w.slug} value={w.slug}>{w.slug} · {w.shortTitle ?? w.title}</option>)}</select></div>
+        <div className="settings-field"><label>Slug (chave única)</label><input className="admin-input" value={slug} onChange={(e) => setSlug(e.target.value)} placeholder="ex: nova-obra" /></div>
+        <div className="settings-field"><label>Título</label><input className="admin-input" value={form.title} onChange={(e) => set("title", e.target.value)} /></div>
+        <div className="settings-field"><label>Título curto</label><input className="admin-input" value={form.shortTitle} onChange={(e) => set("shortTitle", e.target.value)} /></div>
+        <div className="settings-field"><label>Ano</label><input className="admin-input" value={form.year} onChange={(e) => set("year", e.target.value)} placeholder="2014–2015" /></div>
+        <div className="settings-field"><label>Formato</label><select value={form.format} onChange={(e) => set("format", e.target.value)}><option>Série</option><option>Filme</option><option>Especial</option><option>OVA</option></select></div>
+        <div className="settings-field"><label>Universo</label><input className="admin-input" value={form.universe} onChange={(e) => set("universe", e.target.value)} /></div>
+        <div className="settings-field"><label>Arco</label><input className="admin-input" value={form.arc} onChange={(e) => set("arc", e.target.value)} /></div>
+        <div className="settings-field"><label>Ordem / Episódios</label><div style={{ display: "flex", gap: 8 }}><input className="admin-input" type="number" value={form.orderIndex} onChange={(e) => set("orderIndex", e.target.value)} /><input className="admin-input" type="number" min={1} value={form.episodeCount} onChange={(e) => set("episodeCount", e.target.value)} /></div></div>
+        <div className="settings-field"><label>Cor</label><select value={form.color} onChange={(e) => set("color", e.target.value)}><option value="crimson">crimson</option><option value="teal">teal</option><option value="blue">blue</option><option value="violet">violet</option><option value="amber">amber</option></select></div>
+        <div className="settings-field"><label>Distintivo</label><input className="admin-input" value={form.badge} onChange={(e) => set("badge", e.target.value)} /></div>
+        <div className="settings-field"><label>Franquia</label><select value={form.franchiseSlug} onChange={(e) => set("franchiseSlug", e.target.value)}>{(franchisesQ.data ?? [{ slug: "fate" }]).map((f) => <option key={f.slug} value={f.slug}>{f.slug}</option>)}</select></div>
+        <div className="settings-field"><label>Descrição</label><input className="admin-input" value={form.description} onChange={(e) => set("description", e.target.value)} /></div>
+        <SettingToggle label="Obra ativa" description="Inativas somem do catálogo." checked={form.isActive} onChange={(v) => set("isActive", v)} />
+        <div className="settings-field"><button className="primary-button" onClick={save} disabled={upsert.isPending}>{upsert.isPending ? "A guardar…" : "Guardar obra"}</button></div>
+        <p style={{ fontSize: 12, color: "#718096" }}>Mudar o nº de episódios não gera linhas de episódio — corre <code>pnpm db:seed</code> na VPS depois.</p>
+      </div>
+      <div className="settings-card"><div className="settings-title"><div className="settings-icon"><Database size={18} /></div><div><h2>Ativar / desativar</h2><p>Acesso rápido sem abrir o formulário.</p></div></div>
+        {rows.map((w) => <SettingToggle key={w.slug} label={w.shortTitle ?? w.title} description={w.slug} checked={(w.isActive as boolean) ?? true} onChange={(v) => setActive.mutate({ slug: w.slug, isActive: v })} />)}
+      </div>
+    </section>
+  </>;
+}
+
+function Preferences({ route, options, setRoute, smart, compact, onSmartChange, onCompactChange, onReset }: { route: string; options: string[]; setRoute: (value: string) => void; smart: boolean; compact: boolean; onSmartChange: (value: boolean) => void; onCompactChange: (value: boolean) => void; onReset: () => void }) { return <><section className="page-heading compact"><div><div className="eyebrow"><Settings2 size={14} /> CONTROLO DO ARQUIVO</div><h1>Preferências<span className="heading-dot">.</span></h1><p>Afine a experiência ao seu ritmo de visualização.</p></div></section><section className="settings-layout"><div className="settings-card"><div className="settings-title"><div className="settings-icon"><Compass size={18} /></div><div><h2>Rota principal</h2><p>Escolha a jornada que aparece no dashboard.</p></div></div><div className="settings-field"><label>Ordem de visualização</label><select value={route} onChange={event => setRoute(event.target.value)}>{options.map((name) => <option key={name}>{name}</option>)}</select></div></div><div className="settings-card"><div className="settings-title"><div className="settings-icon"><Sparkles size={18} /></div><div><h2>Assistente FateFlow</h2><p>Pequenas sugestões baseadas no seu progresso.</p></div></div><SettingToggle label="Recomendações inteligentes" description="Sugerir o próximo título e sessões curtas." checked={smart} onChange={onSmartChange} /><SettingToggle label="Modo compacto" description="Mostrar mais itens por ecrã no catálogo." checked={compact} onChange={onCompactChange} /></div><div className="settings-card danger-card"><div className="settings-title"><div className="settings-icon"><Database size={18} /></div><div><h2>Dados do arquivo</h2><p>O progresso fica guardado na tua conta e sincroniza entre dispositivos.</p></div></div><button className="danger-button" onClick={onReset}>Repor progresso inicial</button></div></section></>; }
 
 function SettingToggle({ label, description, checked, onChange }: { label: string; description: string; checked: boolean; onChange: (value: boolean) => void }) { return <label className="setting-toggle"><div><strong>{label}</strong><span>{description}</span></div><button type="button" className={`toggle ${checked ? "on" : ""}`} onClick={() => onChange(!checked)} aria-pressed={checked}><i /></button></label>; }
 
-function WorkSheet({ work, progress, onClose, onUpdate }: { work: Work; progress: number; onClose: () => void; onUpdate: (value: number) => void }) { const pct = Math.round((progress / work.episodes) * 100); return <div className="sheet-backdrop" onClick={onClose}><aside className="work-sheet" onClick={event => event.stopPropagation()}><button className="sheet-close" onClick={onClose}><X size={19} /></button><div className={`sheet-art ${work.color}`}><div className="art-stars">✦ · ✧ · ✦</div><strong>{getInitials(work.title)}</strong><span>{work.universe}</span></div><div className="sheet-body"><div className="card-topline"><span className={`status-chip ${statusFor(work, progress)}`}>{statusLabel(statusFor(work, progress))}</span><span>{work.year} · {work.format}</span></div><h2>{work.title}</h2><p>{work.description}</p><div className="sheet-stats"><div><strong>{work.episodes}</strong><span>{work.episodes === 1 ? "item" : "episódios"}</span></div><div><strong>{pct}%</strong><span>completo</span></div><div><strong>{work.order}</strong><span>na rota</span></div></div><div className="sheet-progress"><div className="sheet-progress-head"><strong>O seu progresso</strong><span>{progress} de {work.episodes}</span></div><div className="big-progress"><i style={{ width: `${pct}%` }} /></div></div><div className="sheet-actions"><button className="primary-button" onClick={() => onUpdate(Math.min(work.episodes, progress + 1))}>{progress >= work.episodes ? <><Check size={16} /> Concluído</> : <><Play size={16} fill="currentColor" /> Marcar {work.episodes === 1 ? "como visto" : `episódio ${progress + 1}`}</>}</button><button className="soft-button" onClick={() => onUpdate(0)}>Recomeçar</button></div></div></aside></div>; }
+function ObraView({ work, progress, related, prev, next, activity, onMarkNext, onOpenWork, onBack }: {
+  work: Work & { progress: number; status: Status };
+  progress: number;
+  related: (Work & { progress: number; status: Status })[];
+  prev: (Work & { progress: number; status: Status }) | null;
+  next: (Work & { progress: number; status: Status }) | null;
+  activity: Activity[];
+  onMarkNext: () => void;
+  onOpenWork: (slug: string) => void;
+  onBack: () => void;
+}) {
+  const utils = trpc.useUtils();
+  const metaQ = trpc.meta.get.useQuery({ workSlug: work.id }, { refetchOnWindowFocus: false });
+  const [notes, setNotes] = useState<string | null>(null);
+  useEffect(() => { if (metaQ.data && notes === null) setNotes(metaQ.data.notes ?? ""); }, [metaQ.data, notes]);
+  const metaMut = trpc.meta.update.useMutation({
+    onSuccess: () => { utils.meta.get.invalidate({ workSlug: work.id }); },
+    onError: () => { toast.error("Falha ao guardar"); },
+  });
+  const meta = metaQ.data;
+  const pct = Math.round((progress / work.episodes) * 100);
+  return <>
+    <section className="page-heading compact"><div><div className="eyebrow"><BookOpen size={14} /> {work.universe.toUpperCase()} · {work.format.toUpperCase()}</div><h1>{work.shortTitle}<span className="heading-dot">.</span></h1><p>{work.title}</p></div><div className="heading-actions"><button className="soft-button" onClick={onBack}><ChevronRight size={15} style={{ transform: "rotate(180deg)" }} /> Catálogo</button></div></section>
+    <section className="hero-card">
+      <div className="hero-glow" /><div className={`hero-sigil`}><span>{getInitials(work.title)}</span><i /><b>✦</b></div>
+      <div className="hero-content"><div className="hero-kicker">{work.year} <span>•</span> {work.episodes} {work.episodes === 1 ? "FILME/ESPECIAL" : "EPISÓDIOS"} <span>•</span> {work.arc}</div><h2>{work.title}</h2><p>{work.description}</p><div className="hero-meta"><span><Tv size={15} /> {work.format}</span><span className="hero-status"><span className="live-dot" /> {statusLabel(work.status)}</span><button className="hero-more" aria-pressed={meta?.favorite ?? false} aria-label="Favorito" title="Favorito" onClick={() => metaMut.mutate({ workSlug: work.id, favorite: !(meta?.favorite ?? false) })}><Heart size={18} fill={(meta?.favorite ?? false) ? "currentColor" : "none"} /></button></div><div className="hero-actions">{progress < work.episodes && <button className="hero-play" onClick={onMarkNext}><Play size={17} fill="currentColor" /> {work.episodes === 1 ? "Marcar como visto" : `Marcar episódio ${progress + 1}`}</button>}</div></div>
+      <div className="hero-progress"><div className="progress-ring" style={{ "--progress": `${pct}%` } as React.CSSProperties}><strong>{pct}<small>%</small></strong><span>completo</span></div><div className="hero-progress-copy"><span>Progresso da obra</span><strong>{progress} <em>/ {work.episodes}</em></strong></div></div>
+    </section>
+    <div className="content-grid dashboard-grid">
+      <section className="panel next-panel"><div className="panel-head"><div><div className="eyebrow">EPISÓDIOS</div><h2>Marcar por episódio</h2></div></div>{work.episodes > 1 ? <EpisodeList workSlug={work.id} total={work.episodes} /> : <p style={{ fontSize: 13, color: "#718096" }}>Filme/especial único — usa o botão acima para marcar como visto.</p>}</section>
+      <section className="panel activity-panel">
+        <div className="panel-head"><div><div className="eyebrow">A TUA AVALIAÇÃO</div><h2>Notas pessoais</h2></div></div>
+        <div style={{ display: "flex", gap: 6, marginBottom: 12 }} role="radiogroup" aria-label="Avaliação de 1 a 5">{[1, 2, 3, 4, 5].map((n) => <button key={n} className="icon-quiet" role="radio" aria-checked={(meta?.rating ?? 0) === n} aria-label={`${n} estrelas`} onClick={() => metaMut.mutate({ workSlug: work.id, rating: n })}><Star size={22} fill={(meta?.rating ?? 0) >= n ? "currentColor" : "none"} /></button>)}</div>
+        <div className="settings-field"><label>Notas (só tu vês)</label><input className="admin-input" value={notes ?? ""} onChange={(e) => setNotes(e.target.value)} placeholder="O que achaste desta obra…" /></div>
+        <button className="soft-button" style={{ marginTop: 10 }} onClick={() => metaMut.mutate({ workSlug: work.id, notes: notes ?? "" })} disabled={metaMut.isPending}>Guardar notas</button>
+        {(prev || next) && <div style={{ marginTop: 16 }}><div className="eyebrow" style={{ marginBottom: 8 }}>NA TUA ROTA</div><div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>{prev && <button className="soft-button" onClick={() => onOpenWork(prev.id)}>← {prev.shortTitle}</button>}{next && <button className="soft-button" onClick={() => onOpenWork(next.id)}>{next.shortTitle} →</button>}</div></div>}
+        {related.length > 0 && <div style={{ marginTop: 16 }}><div className="eyebrow" style={{ marginBottom: 8 }}>RELACIONADAS · {work.universe.toUpperCase()}</div>{related.map((r) => <button key={r.id} className="work-row" onClick={() => onOpenWork(r.id)}><div className={`work-cover ${r.color}`}><span>{getInitials(r.title)}</span></div><div className="work-row-copy"><strong>{r.shortTitle}</strong><span>{r.format} · {r.year}</span></div><ChevronRight size={17} className="row-chevron" /></button>)}</div>}
+        {activity.length > 0 && <div style={{ marginTop: 16 }}><div className="eyebrow" style={{ marginBottom: 8 }}>O TEU HISTÓRICO NESTA OBRA</div><div className="activity-list">{activity.slice(0, 5).map((item) => <ActivityRow key={item.id} item={item} />)}</div></div>}
+      </section>
+    </div>
+  </>;
+}
+
+function WorkSheet({ work, progress, onClose, onUpdate, onOpenPage }: { work: Work; progress: number; onClose: () => void; onUpdate: (value: number) => void; onOpenPage: (work: Work) => void }) { const pct = Math.round((progress / work.episodes) * 100); return <div className="sheet-backdrop" onClick={onClose}><aside className="work-sheet" onClick={event => event.stopPropagation()}><button className="sheet-close" onClick={onClose}><X size={19} /></button><div className={`sheet-art ${work.color}`}><div className="art-stars">✦ · ✧ · ✦</div><strong>{getInitials(work.title)}</strong><span>{work.universe}</span></div><div className="sheet-body"><div className="card-topline"><span className={`status-chip ${statusFor(work, progress)}`}>{statusLabel(statusFor(work, progress))}</span><span>{work.year} · {work.format}</span></div><h2>{work.title}</h2><p>{work.description}</p><div className="sheet-stats"><div><strong>{work.episodes}</strong><span>{work.episodes === 1 ? "item" : "episódios"}</span></div><div><strong>{pct}%</strong><span>completo</span></div><div><strong>{work.order}</strong><span>na rota</span></div></div><div className="sheet-progress"><div className="sheet-progress-head"><strong>O seu progresso</strong><span>{progress} de {work.episodes}</span></div><div className="big-progress"><i style={{ width: `${pct}%` }} /></div></div>{work.episodes > 1 && <EpisodeList workSlug={work.id} total={work.episodes} />}<div className="sheet-actions"><button className="primary-button" onClick={() => onUpdate(Math.min(work.episodes, progress + 1))}>{progress >= work.episodes ? <><Check size={16} /> Concluído</> : <><Play size={16} fill="currentColor" /> Marcar {work.episodes === 1 ? "como visto" : `episódio ${progress + 1}`}</>}</button><button className="soft-button" onClick={() => onUpdate(0)}>Recomeçar</button></div><button className="text-button" style={{ marginTop: 10 }} onClick={() => onOpenPage(work)}>Abrir página completa <ArrowRight size={15} /></button></div></aside></div>; }
+
+function EpisodeList({ workSlug, total }: { workSlug: string; total: number }) {
+  const utils = trpc.useUtils();
+  const query = trpc.episodes.list.useQuery({ workSlug }, { refetchOnWindowFocus: false });
+  const invalidate = () => { utils.episodes.list.invalidate({ workSlug }); utils.progress.list.invalidate(); utils.activity.list.invalidate(); };
+  const setMut = trpc.episodes.set.useMutation({ onSuccess: invalidate, onError: () => { toast.error("Falha ao marcar episódio"); } });
+  const upToMut = trpc.episodes.markUpTo.useMutation({ onSuccess: invalidate, onError: () => { toast.error("Falha ao marcar episódios"); } });
+  if (query.isLoading) return <div className="ep-list"><div className="ep-list-head"><strong>Episódios</strong><span>A carregar…</span></div></div>;
+  if (query.isError || !query.data) return null;
+  const eps = query.data.episodes;
+  return <div className="ep-list">
+    <div className="ep-list-head"><strong>Episódios · {query.data.watchedCount}/{total}</strong><div className="ep-list-actions"><button className="text-button" onClick={() => upToMut.mutate({ workSlug, episodeNumber: total })}>Marcar todos</button><button className="text-button" onClick={() => upToMut.mutate({ workSlug, episodeNumber: 0 })}>Limpar</button></div></div>
+    <div className="ep-rows">{eps.map((ep) => <div key={ep.id} className={`ep-row ${ep.watched ? "done" : ""}`}>
+      <button className="ep-check" aria-pressed={ep.watched} aria-label={`${ep.watched ? "Desmarcar" : "Marcar"} episódio ${ep.episodeNumber}`} onClick={() => setMut.mutate({ workSlug, episodeNumber: ep.episodeNumber, watched: !ep.watched })}>{ep.watched ? <Check size={14} /> : <span>{ep.episodeNumber}</span>}</button>
+      <div className="ep-copy"><strong>{ep.title ?? `Episódio ${ep.episodeNumber}`}</strong></div>
+      {!ep.watched && <button className="text-button" onClick={() => upToMut.mutate({ workSlug, episodeNumber: ep.episodeNumber })}>até aqui</button>}
+    </div>)}</div>
+  </div>;
+}
