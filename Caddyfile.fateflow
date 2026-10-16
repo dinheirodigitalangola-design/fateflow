@@ -1,0 +1,12 @@
+# FateFlow — incluir no Caddyfile do host (ex: /etc/caddy/Caddyfile) e fazer reload.
+# Pré-requisito: DNS `fateflow.ddaorven.com` em modo "Somente DNS" (cinzento) na
+# Cloudflare, para o Caddy concluir o desafio HTTP-01 e emitir o TLS sozinho.
+
+fateflow.ddaorven.com {
+	# A app corre em Docker publicada só em 127.0.0.1:3000 (ver docker-compose.yml).
+	reverse_proxy 127.0.0.1:3000
+
+	# Cookies de sessão (httpOnly) passam intactos por defeito; nada a configurar.
+	# Logs úteis no arranque:
+	#   journalctl -u caddy -f
+}

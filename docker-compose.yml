@@ -1,0 +1,44 @@
+# FateFlow — produção na VPS (Caddy faz TLS na porta 80/443 do host).
+# Segredos vivem APENAS no ficheiro .env (chmod 600), nunca aqui nem no git.
+# Rede interna: a app fala com o MySQL pelo hostname `mysql` (porta 3306 não exposta).
+
+services:
+  mysql:
+    image: mysql:8.4
+    container_name: fateflow-mysql
+    restart: unless-stopped
+    command: ["--default-authentication-plugin=mysql_native_password"]
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?MYSQL_ROOT_PASSWORD em falta no .env}
+      MYSQL_DATABASE: fateflow
+      MYSQL_USER: fateflow
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:?MYSQL_PASSWORD em falta no .env}
+    volumes:
+      - fateflow_mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "fateflow", "-p${MYSQL_PASSWORD}"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+
+  app:
+    build: .
+    container_name: fateflow-app
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      NODE_ENV: production
+      PORT: "3000"
+      # DATABASE_URL vem do .env com host `mysql`, ex:
+      # mysql://fateflow:<pass>@mysql:3306/fateflow
+    ports:
+      # Só localhost: o Caddy (no host) faz reverse_proxy para aqui.
+      - "127.0.0.1:3000:3000"
+    depends_on:
+      mysql:
+        condition: service_healthy
+
+volumes:
+  fateflow_mysql_data:
