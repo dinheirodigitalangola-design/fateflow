@@ -7,7 +7,8 @@ services:
     image: mysql:8.4
     container_name: fateflow-mysql
     restart: unless-stopped
-    command: ["--default-authentication-plugin=mysql_native_password"]
+    # NOTA: sem `command` de auth — o MySQL 8.4 removeu `default-authentication-plugin`
+    # e o driver mysql2 fala caching_sha2_password (default) sem problema.
     environment:
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?MYSQL_ROOT_PASSWORD em falta no .env}
       MYSQL_DATABASE: fateflow
