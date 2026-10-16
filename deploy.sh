@@ -4,17 +4,18 @@
 # Segredos: pedidos/gerados na hora, guardados só em .env (chmod 600). Nada é commitado.
 set -euo pipefail
 
-APP_DIR="/opt/fateflow"
+APP_DIR="${APP_DIR:-/opt/fateflow}"
 REPO_URL="${REPO_URL:-}"   # ex: export REPO_URL=git@github.com:org/fateflow.git (ou deixa vazio se o código já está na VPS)
 
 echo "== 1. Código =="
 if [ -n "$REPO_URL" ]; then
   [ -d "$APP_DIR/.git" ] || git clone "$REPO_URL" "$APP_DIR"
   git -C "$APP_DIR" pull --ff-only
+  cd "$APP_DIR"
 else
-  echo "REPO_URL vazio — a usar código já existente em $APP_DIR"
+  echo "REPO_URL vazio — a usar código já existente em $(pwd)"
+  [ -f docker-compose.yml ] || { echo "ERRO: corre ./deploy.sh dentro da pasta do código (onde está docker-compose.yml)"; exit 1; }
 fi
-cd "$APP_DIR"
 
 echo "== 2. .env (criado 1x, nunca commitado) =="
 if [ ! -f .env ]; then
