@@ -35,11 +35,18 @@ services:
       # DATABASE_URL vem do .env com host `mysql`, ex:
       # mysql://fateflow:<pass>@mysql:3306/fateflow
     ports:
-      # Só localhost: o Caddy (no host) faz reverse_proxy para aqui.
+      # Só localhost: smoke test local direto (o Caddy usa a rede deploy_default).
       - "127.0.0.1:3000:3000"
+    networks:
+      - default
+      - deploy_default
     depends_on:
       mysql:
         condition: service_healthy
+
+networks:
+  deploy_default:
+    external: true
 
 volumes:
   fateflow_mysql_data:

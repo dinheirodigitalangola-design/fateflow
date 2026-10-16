@@ -1,12 +1,21 @@
-# FateFlow — incluir no Caddyfile do host (ex: /etc/caddy/Caddyfile) e fazer reload.
-# Pré-requisito: DNS `fateflow.ddaorven.com` em modo "Somente DNS" (cinzento) na
-# Cloudflare, para o Caddy concluir o desafio HTTP-01 e emitir o TLS sozinho.
+# FateFlow — anexar no fim de /home/orven/orven/deploy/Caddyfile (como root) e reload.
+# Pré-requisito: DNS `fateflow.ddaorven.com` em modo "Somente DNS" (cinzento).
+# A app está ligada à rede `deploy_default`, por isso o Caddy alcança-a por nome.
 
-fateflow.ddaorven.com {
-	# A app corre em Docker publicada só em 127.0.0.1:3000 (ver docker-compose.yml).
-	reverse_proxy 127.0.0.1:3000
+# 4. FateFlow (Anime Watch Tracker)
+fateflow.{$DOMAIN} {
+	encode gzip
+	reverse_proxy fateflow-app:3000
 
-	# Cookies de sessão (httpOnly) passam intactos por defeito; nada a configurar.
-	# Logs úteis no arranque:
-	#   journalctl -u caddy -f
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "no-referrer"
+	}
+
+	log {
+		output stdout
+		format json
+	}
 }
