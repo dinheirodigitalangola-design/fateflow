@@ -14,6 +14,7 @@ import {
   History,
   LayoutDashboard,
   ListFilter,
+  LogIn,
   Menu,
   MoreHorizontal,
   Play,
@@ -71,12 +72,23 @@ const WORKS: Work[] = [
   { id: "emiya-menu", title: "Today’s Menu for the Emiya Family", shortTitle: "Today’s Menu", year: "2017–2019", format: "Série", episodes: 13, universe: "Comédia", arc: "Comédia", order: 15, color: "amber", description: "Um spin-off calmo e delicioso sobre a vida quotidiana dos personagens." },
 ];
 
-const INITIAL_PROGRESS: Record<string, number> = { ubw: 14, hf1: 1, hf2: 0, hf3: 0, zero: 0, "first-order": 0, camelot: 0, babylonia: 0, solomon: 0, apocrypha: 0, "strange-fake": 0, "lord-el-melloi": 0, prisma: 0, "prisma-2wei": 0, "emiya-menu": 0 };
-const INITIAL_ACTIVITY: Activity[] = [
-  { id: "a1", title: "Unlimited Blade Works", detail: "Episódio 14 concluído", date: "Hoje, 10:42", kind: "episode" },
-  { id: "a2", title: "Unlimited Blade Works", detail: "Episódio 13 concluído", date: "Ontem, 21:18", kind: "episode" },
-  { id: "a3", title: "Rota Fuyuki", detail: "Objetivo semanal atualizado", date: "12 out, 18:30", kind: "goal" },
-];
+const INITIAL_PROGRESS: Record<string, number> = {};
+const INITIAL_ACTIVITY: Activity[] = [];
+
+/** Impressão digital dos dados demo do preview — purgada uma vez. Só bate com o
+ * estado exato do preview (15 chaves, ubw 14, hf1 1, resto 0). Não há
+ * utilizadores reais anteriores ao lançamento, por isso a colisão é desprezável. */
+const LEGACY_DEMO_IDS = ["a1", "a2", "a3"];
+function isLegacyDemoProgress(p: Record<string, number>): boolean {
+  if (Object.keys(p).length !== 15 || p.ubw !== 14 || p.hf1 !== 1) return false;
+  return Object.entries(p).every(([k, v]) => typeof v === "number" && (k === "ubw" || k === "hf1" || v === 0));
+}
+function withoutLegacyDemoProgress(p: Record<string, number>): Record<string, number> {
+  return isLegacyDemoProgress(p) ? {} : p;
+}
+function withoutLegacyDemoActivity(a: Activity[]): Activity[] {
+  return a.length === 3 && a.every((item, i) => item.id === LEGACY_DEMO_IDS[i]) ? [] : a;
+}
 
 const NAV_ITEMS: { id: View; label: string; icon: typeof LayoutDashboard }[] = [
   { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -110,8 +122,8 @@ export default function Home() {
   const initialView: View = initialPath === "catalogo" || initialPath === "rota" || initialPath === "historico" || initialPath === "preferencias" ? initialPath : "dashboard";
   const [view, setView] = useState<View>(initialView);
   const [mobileMenu, setMobileMenu] = useState(false);
-  const [localProgress, setLocalProgress] = useState<Record<string, number>>(() => getStored("fateflow-progress", INITIAL_PROGRESS));
-  const [localActivity, setLocalActivity] = useState<Activity[]>(() => getStored("fateflow-activity", INITIAL_ACTIVITY));
+  const [localProgress, setLocalProgress] = useState<Record<string, number>>(() => withoutLegacyDemoProgress(getStored("fateflow-progress", INITIAL_PROGRESS)));
+  const [localActivity, setLocalActivity] = useState<Activity[]>(() => withoutLegacyDemoActivity(getStored("fateflow-activity", INITIAL_ACTIVITY)));
   const [selectedWork, setSelectedWork] = useState<Work | null>(null);
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<"todos" | Universe | Status>("todos");
@@ -231,6 +243,13 @@ export default function Home() {
 
   const navigate = (nextView: View) => { setView(nextView); setMobileMenu(false); window.history.pushState({}, "", nextView === "dashboard" ? "/" : `/${nextView}`); window.scrollTo({ top: 0, behavior: "smooth" }); };
 
+  // Sem sessão: página de boas-vindas (sem dados demo, só login Google).
+  // Durante a verificação da sessão mostra-se a mesma página em loading,
+  // para nunca haver flash do dashboard vazio.
+  if (!user) {
+    return <Welcome loading={authLoading} onLogin={() => { try { startLogin(); } catch { toast.error("Login indisponível neste ambiente"); } }} />;
+  }
+
   return (
     <div className="app-shell">
       <aside className={`side-rail ${mobileMenu ? "mobile-open" : ""}`}>
@@ -272,10 +291,50 @@ export default function Home() {
   );
 }
 
+function Welcome({ loading, onLogin }: { loading: boolean; onLogin: () => void }) {
+  const totalItems = WORKS.reduce((sum, work) => sum + work.episodes, 0);
+  const steps = [
+    { icon: LogIn, title: "Entra com Google", text: "Uma conta, sem passwords. O teu arquivo fica guardado e sincronizado." },
+    { icon: Compass, title: "Escolhe a tua rota", text: "Fuyuki, Grand Order, Prisma☆Illya ou exploração livre — pela ordem certa." },
+    { icon: Play, title: "Marca episódios e filmes", text: "Um toque por episódio. O FateFlow calcula o resto." },
+    { icon: BarChart3, title: "Vê o arquivo crescer", text: "Progresso, histórico e próximas obras em qualquer dispositivo." },
+  ];
+  return (
+    <div className="app-shell">
+      <div className="main-area" style={{ margin: "0 auto", maxWidth: 880 }}>
+        <main className="page-content">
+          <section className="page-heading">
+            <div>
+              <div className="eyebrow"><Sparkles size={14} /> FATEFLOW · ANIME WATCH TRACKER</div>
+              <h1>O teu arquivo da Guerra do Santo Graal<span className="heading-dot">.</span></h1>
+              <p>O FateFlow organiza a franquia Fate em rotas ordenadas e regista o teu progresso episódio a episódio. Sem dados de demonstração: começas do zero e tudo o que marcares é teu.</p>
+            </div>
+          </section>
+          <section className="hero-card">
+            <div className="hero-glow" /><div className="hero-sigil"><span>F</span><i /><b>✦</b></div>
+            <div className="hero-content">
+              <div className="hero-kicker">COMEÇA AQUI</div>
+              <h2>15 obras · 4 rotas · {totalItems} episódios e filmes</h2>
+              <p>Da porta de entrada Unlimited Blade Works ao clímax de Solomon — sempre a saber o que ver a seguir.</p>
+              <div className="hero-actions">
+                <button className="hero-play" onClick={onLogin} disabled={loading}><LogIn size={17} /> {loading ? "A ligar..." : "Continuar com Google"}</button>
+              </div>
+            </div>
+          </section>
+          <section className="stats-row">
+            {steps.map((step, i) => { const Icon = step.icon; return <div className="metric-card blue" key={step.title}><div className="metric-icon"><Icon size={18} /></div><div className="metric-copy"><span>PASSO {i + 1}</span><strong>{step.title}</strong><small>{step.text}</small></div></div>; })}
+          </section>
+          <section className="smart-tip"><div className="tip-icon"><Sparkles size={18} /></div><div><strong>Privacidade primeiro</strong><p>Só guardamos o essencial da tua conta Google (nome e email) e o teu progresso. Nada é partilhado.</p></div><button onClick={onLogin} disabled={loading}>Entrar <ArrowRight size={15} /></button></section>
+        </main>
+      </div>
+    </div>
+  );
+}
+
 function Dashboard({ current, enriched, overallPercent, watchedEpisodes, totalEpisodes, activity, onContinue, onNavigate, onMark }: { current: Work & { progress: number; status: Status }; enriched: (Work & { progress: number; status: Status })[]; overallPercent: number; watchedEpisodes: number; totalEpisodes: number; activity: Activity[]; onContinue: () => void; onNavigate: (view: View) => void; onMark: () => void }) {
   const doneMain = enriched.filter(work => work.universe === "Fuyuki" && work.status === "concluido").length;
   return <>
-    <section className="page-heading"><div><div className="eyebrow"><Sparkles size={14} /> ARQUIVO PESSOAL · ROTA FUYUKI</div><h1>Boa noite, Alex<span className="heading-dot">.</span></h1><p>O próximo capítulo está à sua espera. Continue a sua jornada pelo Graal.</p></div><div className="heading-actions"><button className="soft-button"><Star size={16} /> 3 dias seguidos</button><button className="primary-button" onClick={onContinue}><Play size={16} fill="currentColor" /> Continuar</button></div></section>
+    <section className="page-heading"><div><div className="eyebrow"><Sparkles size={14} /> ARQUIVO PESSOAL · ROTA FUYUKI</div><h1>Boa noite<span className="heading-dot">.</span></h1><p>O próximo capítulo está à sua espera. Continue a sua jornada pelo Graal.</p></div><div className="heading-actions"><button className="soft-button"><Star size={16} /> {watchedEpisodes > 0 ? "3 dias seguidos" : "Começa hoje"}</button><button className="primary-button" onClick={onContinue}><Play size={16} fill="currentColor" /> Continuar</button></div></section>
     <section className="hero-card">
       <div className="hero-glow" /><div className="hero-sigil"><span>F</span><i /><b>✦</b></div>
       <div className="hero-content"><div className="hero-kicker">A SEGUIR NA SUA ROTA <span>•</span> EPISÓDIO {current.progress + 1}</div><h2>{current.shortTitle}</h2><p>{current.description}</p><div className="hero-meta"><span><Tv size={15} /> {current.format}</span><span><Clock3 size={15} /> {current.episodes} {current.episodes === 1 ? "filme/especial" : "episódios"}</span><span className="hero-status"><span className="live-dot" /> Em progresso</span></div><div className="hero-actions"><button className="hero-play" onClick={onContinue}><Play size={17} fill="currentColor" /> Retomar episódio {current.progress + 1}</button><button className="hero-more" onClick={onContinue}><MoreHorizontal size={20} /></button></div></div>
@@ -283,7 +342,7 @@ function Dashboard({ current, enriched, overallPercent, watchedEpisodes, totalEp
     </section>
     <section className="stats-row">
       <Metric icon={<BarChart3 />} label="Progresso total" value={`${overallPercent}%`} detail={`${watchedEpisodes} de ${totalEpisodes} itens`} accent="blue" />
-      <Metric icon={<Flame />} label="Sequência atual" value="3 dias" detail="O seu melhor: 7 dias" accent="amber" />
+      <Metric icon={<Flame />} label="Sequência atual" value={watchedEpisodes > 0 ? "3 dias" : "0 dias"} detail={watchedEpisodes > 0 ? "O seu melhor: 7 dias" : "Marca o primeiro episódio"} accent="amber" />
       <Metric icon={<Target />} label="Rota Fuyuki" value={`${doneMain}/5`} detail="obras concluídas" accent="red" />
       <Metric icon={<Clock3 />} label="Tempo estimado" value="18h 40m" detail="para terminar a rota" accent="violet" />
     </section>
@@ -291,7 +350,11 @@ function Dashboard({ current, enriched, overallPercent, watchedEpisodes, totalEp
       <section className="panel next-panel"><div className="panel-head"><div><div className="eyebrow">ORDEM DA SUA ROTA</div><h2>Próximos capítulos</h2></div><button className="text-button" onClick={() => onNavigate("rota")}>Ver rota completa <ArrowRight size={15} /></button></div><div className="next-list">{enriched.filter(work => work.universe === "Fuyuki").slice(0, 4).map((work, index) => <WorkRow key={work.id} work={work} rank={index + 1} onClick={() => onContinue()} />)}</div></section>
       <section className="panel activity-panel"><div className="panel-head"><div><div className="eyebrow">REGISTRO RECENTE</div><h2>Última atividade</h2></div><button className="icon-quiet" onClick={() => onNavigate("historico")}><ArrowRight size={17} /></button></div><div className="activity-list">{activity.slice(0, 3).map(item => <ActivityRow key={item.id} item={item} />)}</div><button className="panel-footer-button" onClick={() => onNavigate("historico")}>Abrir histórico completo <ChevronRight size={15} /></button></section>
     </div>
-    <section className="smart-tip"><div className="tip-icon"><Sparkles size={18} /></div><div><strong>Sugestão do FateFlow</strong><p>Está a 2 episódios de fechar o seu primeiro arco. Uma sessão de 48 min leva-o diretamente ao confronto final de Unlimited Blade Works.</p></div><button onClick={onContinue}>Ver sugestão <ArrowRight size={15} /></button></section>
+    {watchedEpisodes === 0 ? (
+      <section className="smart-tip"><div className="tip-icon"><Sparkles size={18} /></div><div><strong>O teu arquivo está vazio</strong><p>Abre uma obra no catálogo e marca o primeiro episódio — o FateFlow trata do resto.</p></div><button onClick={() => onNavigate("catalogo")}>Abrir catálogo <ArrowRight size={15} /></button></section>
+    ) : (
+      <section className="smart-tip"><div className="tip-icon"><Sparkles size={18} /></div><div><strong>Sugestão do FateFlow</strong><p>Está a 2 episódios de fechar o seu primeiro arco. Uma sessão de 48 min leva-o diretamente ao confronto final de Unlimited Blade Works.</p></div><button onClick={onContinue}>Ver sugestão <ArrowRight size={15} /></button></section>
+    )}
   </>;
 }
 
