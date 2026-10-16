@@ -1,0 +1,808 @@
+FATEFLOW — HANDOFF COMPLETO PARA O PRÓXIMO AGENTE
+====================================================
+
+Data do handoff: 16/10/2026
+Idioma atual da aplicação: Português do Brasil
+Nome do projeto: FateFlow — Anime Watch Tracker
+Commit de referência: a0f9433 — Build FateFlow anime watch tracker
+Branch: main
+Estado do repositório nesta sessão: limpo após o commit
+
+Este documento deve ser lido antes de qualquer alteração. O projeto foi criado como um protótipo/MVP web responsivo e visualmente completo para acompanhar a ordem de animes da franquia Fate. O objetivo do próximo agente é transformar o MVP numa aplicação de produção com autenticação, persistência real, catálogo completo, testes e deploy na VPS com o domínio do utilizador.
+
+
+1. RESUMO EXECUTIVO
+-------------------
+
+O FateFlow é um tracker de animes com uma interface inspirada em um arquivo mágico/centro de comando. A aplicação permite ao utilizador:
+
+- Ver um dashboard com o progresso geral.
+- Continuar a obra atual.
+- Acompanhar progresso por episódio ou filme.
+- Ver o estado de cada obra.
+- Consultar a própria rota de visualização.
+- Pesquisar e filtrar o catálogo.
+- Alternar entre catálogo em lista e mapa visual.
+- Consultar histórico de atividade.
+- Alterar algumas preferências.
+- Abrir um painel/modal de detalhes de cada obra.
+
+A interface já está funcional para demonstração e uso individual no mesmo navegador. O principal ponto incompleto é que o progresso atual é guardado somente em localStorage; a base de dados e o sistema de autenticação ainda não estão ligados às funcionalidades do utilizador.
+
+Classificação atual:
+
+- Interface: MVP avançado.
+- Navegação: funcional.
+- Responsividade: funcional para desktop e mobile.
+- Progresso local: funcional.
+- Persistência entre dispositivos: ainda não implementada.
+- Autenticação real: ainda não integrada à experiência do utilizador.
+- Catálogo de produção: ainda incompleto.
+- Deploy em VPS/domínio: ainda por fazer.
+- Produto 100% produção: ainda não.
+
+
+2. O QUE FOI FEITO
+------------------
+
+2.1 Interface e identidade visual
+
+Foi criada uma interface própria chamada FateFlow, com:
+
+- Sidebar escura em desktop.
+- Navegação inferior em mobile.
+- Cabeçalho com breadcrumb, avatar e ações.
+- Visual de arquivo/centro de comando mágico.
+- Paleta baseada em azul-marinho, vermelho carmesim, azul, verde-teal, violeta e âmbar.
+- Tipografia serifada nos títulos e sans-serif nos dados.
+- Cards de progresso.
+- Hero card da obra atual.
+- Ícones Lucide.
+- Estados visuais de progresso.
+- Animação de abertura do painel lateral de detalhes.
+- Layout adaptado para desktop, tablet e mobile.
+
+A interface não reproduz personagens ou logótipos oficiais; usa uma estética inspirada na franquia sem depender de material protegido.
+
+2.2 Dashboard
+
+O dashboard atual apresenta:
+
+- Saudação ao utilizador.
+- Data e identificação da rota ativa.
+- Obra atual em destaque.
+- Percentual de progresso da obra atual.
+- Botão para retomar episódio.
+- Botão para marcar o próximo episódio como visto.
+- Estatísticas gerais:
+  - Progresso total.
+  - Sequência de dias.
+  - Obras concluídas na rota Fuyuki.
+  - Tempo estimado.
+- Lista de próximos capítulos.
+- Histórico recente.
+- Sugestão inteligente baseada em regras simples.
+
+A recomendação atual não usa IA; é uma regra de interface baseada no progresso e na ordem dos dados.
+
+2.3 Catálogo
+
+O catálogo possui:
+
+- Pesquisa por título, universo e rota.
+- Filtros por universo.
+- Visualização em lista/cartões.
+- Visualização em mapa.
+- Estados de obra:
+  - Assistido/concluído.
+  - Em progresso.
+  - Próximo.
+  - Em falta.
+- Barra de progresso por obra.
+- Ano, formato e quantidade de episódios/itens.
+- Abertura do detalhe da obra ao clicar.
+- Estado vazio quando não existem resultados.
+
+2.4 Mapa
+
+Foi criada uma visualização visual do universo Fate com:
+
+- Núcleo central FateFlow.
+- Rota principal/Fuyuki.
+- Fate/Grand Order.
+- Universos alternativos.
+- Ligações visuais entre grupos.
+- Obras clicáveis.
+- Imagem original fornecida pelo utilizador integrada como referência visual no final do mapa.
+
+O mapa não substitui ainda uma estrutura de dependências rigorosa; é uma visualização navegável e explicativa.
+
+2.5 Minha rota
+
+A rota atual principal é:
+
+1. Fate/stay night: Unlimited Blade Works
+2. Fate/stay night: Heaven’s Feel I — Presage Flower
+3. Fate/stay night: Heaven’s Feel II — Lost Butterfly
+4. Fate/stay night: Heaven’s Feel III — Spring Song
+5. Fate/Zero
+
+A página de rota apresenta:
+
+- Rota ativa.
+- Percentual explorado.
+- Número de obras concluídas.
+- Timeline vertical.
+- Estados por obra.
+- Barra de progresso.
+- Ação rápida para marcar o próximo item.
+- Painel detalhado ao abrir uma obra.
+
+Existem opções visuais de rota, mas as rotas alternativas ainda não estão plenamente implementadas como listas independentes persistentes.
+
+2.6 Histórico
+
+O histórico atual apresenta:
+
+- Registos recentes.
+- Episódio concluído.
+- Obra marcada como vista.
+- Alteração de objetivo.
+- Data/hora amigável.
+- Estatísticas de ações recentes, sequência e ritmo semanal.
+- Botão para limpar o histórico.
+
+O histórico atual também é local e não é paginado.
+
+2.7 Preferências
+
+A página de preferências permite:
+
+- Alterar visualmente a rota ativa.
+- Ativar/desativar recomendações inteligentes.
+- Ativar/desativar modo compacto.
+- Repor o progresso inicial.
+
+As preferências ainda não são persistidas numa conta ou na base de dados.
+
+2.8 Modal de detalhes
+
+O modal de detalhes inclui:
+
+- Arte abstrata da obra.
+- Nome completo.
+- Universo.
+- Ano.
+- Formato.
+- Quantidade de episódios/itens.
+- Percentual completo.
+- Posição na rota.
+- Descrição curta.
+- Ação para marcar o item seguinte.
+- Ação para marcar como concluído.
+- Ação para recomeçar.
+
+Ainda falta transformar este modal numa página de detalhes completa.
+
+2.9 Responsividade
+
+Foram validados:
+
+- Desktop em 1280 px.
+- Mobile em 390 px.
+- Menu lateral desktop.
+- Menu inferior mobile.
+- Hero adaptado.
+- Cartões responsivos.
+- Catálogo com uma coluna em mobile.
+- Timeline adaptada.
+- Modal de detalhe em largura total no mobile.
+
+2.10 URLs existentes
+
+O manifesto está em:
+
+client/public/manus-routes.json
+
+Rotas:
+
+- /
+- /catalogo
+- /rota
+- /historico
+- /preferencias
+
+A navegação interna também atualiza a URL através de history.pushState.
+
+
+3. ESTRUTURA DO PROJETO
+-----------------------
+
+Principais ficheiros:
+
+- client/index.html
+  HTML inicial, metadata, viewport e título.
+
+- client/src/App.tsx
+  Router principal e providers globais.
+
+- client/src/pages/Home.tsx
+  Implementação principal da experiência FateFlow. Contém dashboard, catálogo, mapa, rota, histórico, preferências, cards, timeline, modal e lógica local de progresso.
+
+- client/src/index.css
+  Toda a identidade visual e responsividade do app.
+
+- client/src/main.tsx
+  Inicialização React, QueryClient, tRPC e configuração de sessão.
+
+- client/src/lib/trpc.ts
+  Cliente tRPC tipado para comunicação com o backend.
+
+- client/public/fate-map-reference.png
+  Imagem de referência fornecida pelo utilizador e utilizada no mapa.
+
+- client/public/manus-routes.json
+  Manifesto de rotas exigido pelo runtime.
+
+- server/routers.ts
+  Router tRPC atual. Contém autenticação base e deve receber os routers de progresso, obras, histórico e preferências.
+
+- server/db.ts
+  Helper Drizzle para ligação à base de dados e operações base de utilizador.
+
+- drizzle/schema.ts
+  Schema atual contém apenas a tabela users. Ainda precisa receber as tabelas de negócio.
+
+- TODO.md
+  Checklist do MVP inicial. Está marcado como concluído apenas para as funcionalidades entregues nesta fase; não significa que o produto esteja 100% pronto para produção.
+
+- package.json
+  Scripts e dependências.
+
+- pnpm-workspace.yaml
+  Configuração do pnpm e permissões de scripts.
+
+
+4. STACK TÉCNICA ATUAL
+----------------------
+
+Frontend:
+
+- React 19.
+- TypeScript.
+- Vite.
+- Tailwind CSS v4.
+- Wouter para routing.
+- Lucide React para ícones.
+- Sonner para toasts.
+- Radix UI disponível no projeto.
+
+Backend:
+
+- Node.js.
+- Express.
+- tRPC.
+- Drizzle ORM.
+- MySQL compatível.
+- OAuth/session scaffolding fornecido pelo starter.
+
+Ferramentas:
+
+- pnpm 10.18.0.
+- TypeScript 5.9.
+- Vite 7.
+- Vitest disponível, mas ainda sem testes de negócio relevantes.
+
+Scripts importantes:
+
+- pnpm dev
+  Inicia o servidor de desenvolvimento Express/Vite.
+
+- pnpm check
+  Executa tsc --noEmit.
+
+- pnpm build
+  Executa o build frontend Vite e o bundle backend esbuild.
+
+- pnpm start
+  Inicia a aplicação compilada através de dist/index.js.
+
+- pnpm test
+  Executa Vitest. Ainda não existem testes de negócio completos.
+
+- pnpm db:push
+  Gera e aplica migrações Drizzle.
+
+- pnpm db:migrate
+  Aplica migrações existentes.
+
+
+5. DADOS INICIAIS ATUAIS
+------------------------
+
+O catálogo inicial existe como constante no ficheiro:
+
+client/src/pages/Home.tsx
+
+Obras presentes:
+
+- Fate/stay night: Unlimited Blade Works — 26 episódios.
+- Fate/stay night: Heaven’s Feel I — Presage Flower — 1 filme.
+- Fate/stay night: Heaven’s Feel II — Lost Butterfly — 1 filme.
+- Fate/stay night: Heaven’s Feel III — Spring Song — 1 filme.
+- Fate/Zero — 25 episódios.
+- Fate/Grand Order: First Order — 1 especial.
+- Fate/Grand Order: Divine Realm of the Round Table — Camelot — 2 filmes.
+- Fate/Grand Order: Absolute Demonic Front — Babylonia — 21 episódios.
+- Fate/Grand Order: Final Singularity — Grand Temple of Time: Solomon — 1 filme.
+- Fate/Apocrypha — 25 episódios.
+- Fate/strange Fake —Whispers of Dawn— — 1 especial.
+- The Case Files of Lord El-Melloi II — 13 episódios.
+- Fate/kaleid liner Prisma☆Illya — 10 episódios.
+- Fate/kaleid liner Prisma☆Illya 2wei! — 10 episódios.
+- Today’s Menu for the Emiya Family — 13 episódios.
+
+Estado inicial de demonstração:
+
+- Unlimited Blade Works: 14/26.
+- Heaven’s Feel I: 1/1.
+- Restantes itens: 0.
+
+Chaves atuais no localStorage:
+
+- fateflow-progress
+- fateflow-activity
+
+Não manter estes dados como fonte de verdade na versão de produção.
+
+
+6. O QUE ESTÁ INCOMPLETO
+-------------------------
+
+6.1 Base de dados real
+
+Embora o projeto tenha sido inicializado com Server e Database, o frontend atual não grava o progresso na base de dados. A base atual ainda tem apenas users.
+
+Falta criar tabelas como:
+
+- works
+  id, title, slug, description, year, format, universe, arc, orderIndex, episodeCount, coverUrl, isActive.
+
+- seasons ou work_parts
+  Para separar temporadas, filmes e especiais relacionados.
+
+- episodes
+  workId, episodeNumber, title, duration, airDate, synopsis.
+
+- routes
+  id, name, description, universe, isDefault.
+
+- route_items
+  routeId, workId, position, relationType, notes.
+
+- user_progress
+  userId, workId, episodeId/partId, status, watchedAt, updatedAt.
+
+- user_preferences
+  userId, selectedRouteId, smartRecommendations, compactMode, language.
+
+- activity_log
+  userId, actionType, workId, episodeId, metadata, createdAt.
+
+- user_ratings ou user_notes, se forem incluídos.
+
+O próximo agente deve criar migrações additive e não apagar a tabela users.
+
+6.2 Autenticação
+
+O starter já contém autenticação base/OAuth, mas a experiência FateFlow ainda não exige login nem associa progresso ao utilizador autenticado.
+
+Falta:
+
+- Ligar auth.me ao frontend.
+- Criar ecrã de login/onboarding.
+- Associar todos os dados ao userId.
+- Garantir que cada utilizador só vê o próprio progresso.
+- Adicionar logout no menu.
+- Tratar utilizador anónimo/demo sem confundir com utilizador persistente.
+- Migrar localStorage para a conta depois do login.
+
+6.3 Backend/tRPC
+
+server/routers.ts ainda tem apenas:
+
+- auth.me
+- auth.logout
+- system router
+
+Falta adicionar procedimentos protegidos, por exemplo:
+
+- catalog.list
+- catalog.getById
+- routes.list
+- routes.getActive
+- routes.setActive
+- progress.list
+- progress.markEpisode
+- progress.markWork
+- progress.resetWork
+- activity.list
+- activity.clear
+- preferences.get
+- preferences.update
+
+Validar inputs com zod e impedir progressos maiores que o total de episódios.
+
+6.4 Catálogo
+
+O catálogo atual é uma amostra. Falta validar e ampliar a franquia, incluindo:
+
+- Fate/stay night de 2006.
+- Unlimited Blade Works filme, se mantido como opcional.
+- Heaven’s Feel completo.
+- Fate/Zero.
+- Fate/Grand Order First Order.
+- Moonlight/Lostroom.
+- Camelot completo.
+- Babylonia e Before Awakening.
+- Solomon.
+- Fate/Apocrypha.
+- Fate/Extra Last Encore.
+- Fate/strange Fake e série posterior.
+- Fate/Prototype.
+- Lord El-Melloi II e especiais.
+- Prisma☆Illya completo, incluindo Vow in the Snow e Licht.
+- Carnival Phantasm.
+- Today’s Menu for the Emiya Family.
+- Outros especiais relevantes, com marcação clara de opcionalidade.
+
+A lista deve ser validada por fonte confiável antes de ser usada como catálogo definitivo. Não confiar exclusivamente no mapa original.
+
+6.5 Rotas
+
+A UI possui selector de rota, mas ainda não existe motor de rotas independentes. Falta:
+
+- Persistir a rota escolhida.
+- Fazer o dashboard respeitar a rota selecionada.
+- Criar uma rota Fuyuki completa.
+- Criar rota Grand Order.
+- Criar rota Prisma☆Illya.
+- Criar rota de exploração livre.
+- Definir relações de pré-requisito.
+- Implementar reordenação.
+- Permitir criar rota personalizada.
+
+6.6 Recomendações
+
+A recomendação atual é apenas uma sugestão fixa/derivada do progresso local. Falta:
+
+- Motor de recomendação baseado no estado real.
+- Regras de dependência por rota.
+- Explicação do motivo da sugestão.
+- Respeito por itens opcionais.
+- Sugestões por duração disponível.
+- Sugestões para continuar a mesma série.
+- Possível integração com LLM apenas depois de o modelo de dados estar correto; não usar IA para substituir regras básicas de ordem.
+
+6.7 Detalhes de obra
+
+O modal atual é suficiente para MVP, mas falta uma página de detalhe com:
+
+- Lista de episódios.
+- Títulos dos episódios.
+- Sinopses.
+- Spoilers ocultáveis.
+- Relações entre obras.
+- Obras anteriores e seguintes.
+- Trailer/material promocional, apenas com direitos e origem adequados.
+- Links externos.
+- Favorito, rating e notas pessoais.
+
+6.8 Histórico e estatísticas
+
+Falta:
+
+- Persistência no backend.
+- Paginação.
+- Filtros por data/obra.
+- Calendário.
+- Tempo total assistido calculado por duração.
+- Exportação.
+- Desfazer ação.
+- Estatísticas reais em vez de valores de demonstração.
+
+6.9 Notificações
+
+Falta:
+
+- Lembretes.
+- Metas semanais configuráveis.
+- Notificação de nova obra/temporada.
+- Email ou push, caso desejado.
+- Preferência de horário.
+
+6.10 Conteúdo visual
+
+A arte atual é abstrata e adequada ao protótipo. Para produção:
+
+- Definir uma política de imagens.
+- Usar capas licenciadas, próprias ou URLs permitidas.
+- Criar favicon/logo definitiva.
+- Não distribuir assets protegidos sem autorização.
+- Substituir ou manter a imagem de referência conforme os direitos de utilização.
+
+6.11 Acessibilidade
+
+Falta uma auditoria completa de:
+
+- Labels ARIA.
+- Leitura por screen reader.
+- Foco por teclado.
+- Contraste.
+- Estados de loading e erro.
+- Navegação sem rato.
+- Tamanho mínimo dos alvos de toque.
+
+6.12 Testes
+
+Ainda faltam testes de negócio. Criar pelo menos:
+
+- Cálculo de progresso.
+- Estados concluído/progresso/próximo/em falta.
+- Atualização de episódio.
+- Reset.
+- Filtros.
+- Pesquisa.
+- Roteamento.
+- Persistência via API.
+- Autorização por utilizador.
+- Fluxo end-to-end no mobile e desktop.
+
+
+7. PLANO RECOMENDADO PARA O PRÓXIMO AGENTE
+-------------------------------------------
+
+FASE 1 — estabilização e modelo de dados
+
+1. Confirmar o zip e preservar o commit a0f9433 como baseline.
+2. Instalar dependências com pnpm install.
+3. Executar pnpm check e pnpm build.
+4. Criar o schema Drizzle de produção.
+5. Criar migrações sem apagar users.
+6. Criar seed idempotente para o catálogo Fate.
+7. Não gravar seed em cada startup.
+
+FASE 2 — autenticação e persistência
+
+1. Integrar auth.me na UI.
+2. Definir fluxo para visitante demo.
+3. Migrar progresso local para a conta depois do login.
+4. Criar routers protegidos tRPC.
+5. Trocar localStorage pela API quando o utilizador estiver autenticado.
+6. Manter fallback local apenas como modo demo explicitamente identificado.
+
+FASE 3 — progresso e catálogo
+
+1. Normalizar works, episodes, routes e route_items.
+2. Renderizar o catálogo vindo do backend.
+3. Marcar episódio/filme individual via mutation.
+4. Recalcular progresso no servidor.
+5. Criar histórico no servidor.
+6. Implementar rotas reais e recomendações determinísticas.
+
+FASE 4 — experiência completa
+
+1. Transformar modal de detalhe em página/rota própria.
+2. Adicionar notas, favoritos e ratings, se aprovados.
+3. Adicionar onboarding.
+4. Adicionar estados de loading/error/empty.
+5. Melhorar acessibilidade.
+6. Criar testes automatizados.
+
+FASE 5 — VPS e domínio
+
+1. Preparar Node.js 22 ou versão compatível.
+2. Instalar pnpm 10.18.0.
+3. Configurar variáveis de ambiente.
+4. Instalar dependências no servidor.
+5. Executar migrações.
+6. Executar build.
+7. Criar serviço systemd.
+8. Colocar Nginx/Caddy como reverse proxy.
+9. Apontar DNS do domínio para a VPS.
+10. Configurar HTTPS com Let’s Encrypt.
+11. Testar /api/health.
+12. Testar rotas SPA diretamente.
+13. Configurar logs e reinício automático.
+14. Criar backup de base de dados.
+
+
+8. DEPLOY NA VPS — GUIA BASE
+----------------------------
+
+Os dados reais da VPS, domínio, utilizador SSH e credenciais não estão presentes neste ficheiro e nunca devem ser inventados. Substituir os placeholders abaixo.
+
+Variáveis a definir no servidor:
+
+- NODE_ENV=production
+- PORT=3000 ou a porta interna escolhida
+- DATABASE_URL=mysql://USER:PASSWORD@HOST:3306/DATABASE
+- OAuth/Manus variables exigidas pelo starter, caso o login seja mantido
+- Outras variáveis presentes no .env.example do zip
+
+Passos gerais:
+
+1. Copiar o zip para a VPS ou clonar o repositório.
+2. Extrair para um diretório como /var/www/fateflow.
+3. Confirmar que package.json, pnpm-lock.yaml e código estão presentes.
+4. Instalar Node.js 22.
+5. Instalar pnpm 10.18.0.
+6. Criar .env de produção com permissões restritas.
+7. Executar pnpm install --frozen-lockfile.
+8. Executar pnpm db:migrate depois de validar o DATABASE_URL.
+9. Executar seed idempotente, quando criado.
+10. Executar pnpm check.
+11. Executar pnpm build.
+12. Testar manualmente com PORT=3000 pnpm start.
+13. Confirmar curl http://127.0.0.1:3000/api/health.
+14. Criar serviço systemd apontando para pnpm start ou para node dist/index.js.
+15. Configurar Nginx ou Caddy para encaminhar o domínio para 127.0.0.1:3000.
+16. Configurar DNS A/AAAA para o IP da VPS.
+17. Configurar TLS.
+18. Testar o domínio em desktop e mobile.
+
+Exemplo de systemd, adaptar ao ambiente real:
+
+[Unit]
+Description=FateFlow Anime Watch Tracker
+After=network.target
+
+[Service]
+Type=simple
+User=fateflow
+WorkingDirectory=/var/www/fateflow
+EnvironmentFile=/var/www/fateflow/.env
+Environment=NODE_ENV=production
+Environment=PORT=3000
+ExecStart=/usr/bin/node /var/www/fateflow/dist/index.js
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+
+Comandos típicos depois de criar o ficheiro systemd:
+
+- sudo systemctl daemon-reload
+- sudo systemctl enable fateflow
+- sudo systemctl restart fateflow
+- sudo systemctl status fateflow
+- journalctl -u fateflow -f
+
+Exemplo Nginx, adaptar o domínio e certificados:
+
+server {
+    listen 80;
+    server_name SEU_DOMINIO.com www.SEU_DOMINIO.com;
+
+    location / {
+        proxy_pass http://127.0.0.1:3000;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+    }
+}
+
+Depois:
+
+- Testar nginx -t.
+- Recarregar nginx.
+- Executar certbot ou configurar TLS equivalente.
+- Confirmar que o proxy preserva cookies e headers necessários ao login.
+
+
+9. CUIDADOS IMPORTANTES DE PRODUÇÃO
+------------------------------------
+
+- Não usar localStorage como fonte de verdade depois de ativar contas.
+- Não confiar no userId enviado pelo browser; extrair do utilizador autenticado no servidor.
+- Validar todas as mutations com zod.
+- Não expor DATABASE_URL no frontend.
+- Não colocar segredos no repositório ou no zip.
+- Fazer backup antes de migrations destrutivas.
+- Não usar DELETE de dados em testes contra a base de produção.
+- Seeds devem ser idempotentes.
+- Não apagar users, migrations ou dados existentes durante o setup.
+- Configurar cookies de sessão corretamente para HTTPS e domínio final.
+- Se houver iframe/Preview, cookies precisam de SameSite=None e Secure conforme o ambiente.
+- Usar HTTPS obrigatório em produção.
+- Não assumir que a imagem de referência pode ser distribuída publicamente sem validar direitos.
+- Não prometer sincronização entre dispositivos antes de ligar o backend.
+- Não chamar recomendações de IA de “inteligentes” se forem apenas regras fixas; separar recomendação determinística de recomendação por IA.
+
+
+10. VALIDAÇÃO JÁ EXECUTADA
+--------------------------
+
+Comandos executados com sucesso no projeto:
+
+- pnpm check
+- pnpm build
+- curl local ao servidor de desenvolvimento
+- curl ao manifesto /manus-routes.json
+- screenshots desktop do dashboard, catálogo, rota e preferências
+- screenshot mobile do dashboard
+- verificação dos caminhos diretos /catalogo, /rota, /historico e /preferencias
+
+Resultado do build:
+
+- Vite compilado com sucesso.
+- Bundle backend esbuild compilado com sucesso.
+- TypeScript sem erros.
+
+Existe um aviso não bloqueante no build sobre o script /api/platform/config.js não ter type=module. Esse script é fornecido pelo runtime/starter e não impediu o build. Avaliar se deve ser mantido pelo ambiente ou ajustado no futuro.
+
+Preview temporário validado nesta sessão:
+
+https://3000-i7g457j59olmiz1pvx5vb-1f650f1c.us4.manus.computer/
+
+Este URL é um Preview temporário, não o domínio final da VPS.
+
+
+11. CHECKLIST DE CONCLUSÃO 100%
+-------------------------------
+
+Considerar o produto pronto somente quando todos os itens seguintes forem verdadeiros:
+
+[ ] Login/logout real funcional.
+[ ] Dados isolados por utilizador.
+[ ] Schema de obras/episódios/rotas/progresso/histórico criado.
+[ ] Migrações aplicadas e versionadas.
+[ ] Seed completo e idempotente.
+[ ] Catálogo validado.
+[ ] Progresso persistido no backend.
+[ ] Episódios e filmes marcáveis individualmente.
+[ ] Histórico persistido.
+[ ] Preferências persistidas.
+[ ] Rotas personalizadas funcionais.
+[ ] Recomendações baseadas no progresso real.
+[ ] Detalhe completo de obra.
+[ ] Loading/error/empty states finais.
+[ ] Testes unitários criados.
+[ ] Testes de integração criados.
+[ ] Testes end-to-end criados.
+[ ] Auditoria de acessibilidade concluída.
+[ ] Mobile testado em browsers reais.
+[ ] Domínio configurado.
+[ ] HTTPS ativo.
+[ ] Serviço systemd ou equivalente ativo.
+[ ] Monitorização e logs configurados.
+[ ] Backups da base de dados configurados.
+[ ] Política de privacidade e termos avaliados.
+[ ] Assets visuais com direitos adequados.
+[ ] Deploy de produção validado.
+
+
+12. DEFINIÇÃO DE PRONTO SUGERIDA
+--------------------------------
+
+O próximo agente deve entregar:
+
+1. Um utilizador capaz de entrar na aplicação.
+2. Um utilizador capaz de escolher uma rota.
+3. Um utilizador capaz de marcar episódios e filmes.
+4. O progresso visível em qualquer dispositivo depois de novo login.
+5. Um histórico persistente.
+6. Uma recomendação correta baseada no estado real.
+7. Um catálogo completo e administrável.
+8. Uma aplicação servida no domínio real com HTTPS.
+9. Uma base de dados com migrations e backup.
+10. Testes que protejam o cálculo de progresso e o isolamento de dados.
+
+Até esses pontos serem concluídos, o FateFlow deve ser tratado como MVP/preview funcional, não como produto final de produção.
+
+FIM DO HANDOFF
