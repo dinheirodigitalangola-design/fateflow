@@ -22,6 +22,13 @@
       "when": 1792160749827,
       "tag": "0002_fateflow_phase1_uniques",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "5",
+      "when": 1792190445059,
+      "tag": "0003_multi_anime_franchises",
+      "breakpoints": true
     }
   ]
 }

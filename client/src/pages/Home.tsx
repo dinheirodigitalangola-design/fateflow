@@ -53,6 +53,8 @@ type Work = {
   color: string;
   description: string;
   badge?: string;
+  /** Franquia da obra (multi-anime; null no fallback local). Pronto p/ filtro futuro. */
+  franchiseSlug?: string | null;
 };
 
 type Activity = { id: string; title: string; detail: string; date: string; kind: "episode" | "title" | "goal" };
@@ -157,6 +159,40 @@ export default function Home() {
   const prefsMutation = trpc.preferences.update.useMutation({ onSuccess: () => { utils.preferences.get.invalidate(); } });
   const routesQuery = trpc.routes.list.useQuery(undefined, { enabled: !!user, retry: false, refetchOnWindowFocus: false });
   const setActiveRoute = trpc.routes.setActive.useMutation({ onSuccess: () => { utils.preferences.get.invalidate(); } });
+  const clearHistoryMutation = trpc.activity.clear.useMutation({
+    onSuccess: () => { utils.activity.list.invalidate(); toast("Histórico limpo"); },
+    onError: () => { toast.error("Falha ao limpar o histórico da conta"); },
+  });
+  const resetAllMutation = trpc.progress.resetAll.useMutation({
+    onSuccess: () => {
+      utils.progress.list.invalidate(); utils.activity.list.invalidate();
+      toast.success("Progresso reposto", { description: "O arquivo voltou ao estado inicial." });
+    },
+    onError: () => { toast.error("Falha ao repor o progresso da conta"); },
+  });
+  const [localSmart, setLocalSmart] = useState(true);
+  const [localCompact, setLocalCompact] = useState(false);
+  const smart = user && prefsQuery.data ? (prefsQuery.data.smartRecommendations ?? true) : localSmart;
+  const compact = user && prefsQuery.data ? (prefsQuery.data.compactMode ?? false) : localCompact;
+  const handleSmartChange = (value: boolean) => {
+    setLocalSmart(value);
+    if (user) prefsMutation.mutate({ smartRecommendations: value });
+  };
+  const handleCompactChange = (value: boolean) => {
+    setLocalCompact(value);
+    if (user) prefsMutation.mutate({ compactMode: value });
+  };
+  const handleClearHistory = () => {
+    setLocalActivity([]);
+    if (user) clearHistoryMutation.mutate();
+    else toast("Histórico limpo");
+  };
+  const handleResetAll = () => {
+    setLocalProgress(INITIAL_PROGRESS);
+    setLocalActivity(INITIAL_ACTIVITY);
+    if (user) resetAllMutation.mutate();
+    else toast.success("Progresso reposto", { description: "O arquivo voltou ao estado inicial." });
+  };
 
   // Rota vinda do servidor quando logado (fallback: estado local demo).
   useEffect(() => {
@@ -201,6 +237,7 @@ export default function Home() {
       color: r.color ?? "blue",
       description: r.description ?? "",
       badge: r.badge ?? undefined,
+      franchiseSlug: (r as { franchiseSlug?: string | null }).franchiseSlug ?? null,
     }));
   }, [catalogQuery.data]);
   const activeWorks = worksFromServer ?? WORKS;
@@ -283,8 +320,8 @@ export default function Home() {
           {view === "dashboard" && <Dashboard current={current} enriched={enriched} overallPercent={overallPercent} watchedEpisodes={watchedEpisodes} totalEpisodes={totalEpisodes} activity={activity} onContinue={() => setSelectedWork(current)} onNavigate={navigate} onMark={() => updateProgress(current, (progress[current.id] ?? 0) + 1)} />}
           {view === "catalogo" && <Catalog filteredWorks={filteredWorks} search={search} setSearch={setSearch} filter={filter} setFilter={setFilter} catalogMode={catalogMode} setCatalogMode={setCatalogMode} onSelect={setSelectedWork} progress={progress} />}
           {view === "rota" && <RouteView works={mainWorks} route={route} setRoute={handleRouteChange} onSelect={setSelectedWork} progress={progress} onMark={updateProgress} />}
-          {view === "historico" && <HistoryView activity={activity} onClear={() => { setLocalActivity([]); toast("Histórico limpo"); }} />}
-          {view === "preferencias" && <Preferences route={route} setRoute={handleRouteChange} onReset={() => { setLocalProgress(INITIAL_PROGRESS); setLocalActivity(INITIAL_ACTIVITY); toast.success("Progresso reposto", { description: "O arquivo voltou ao estado inicial." }); }} />}
+          {view === "historico" && <HistoryView activity={activity} onClear={handleClearHistory} />}
+          {view === "preferencias" && <Preferences route={route} setRoute={handleRouteChange} smart={smart} compact={compact} onSmartChange={handleSmartChange} onCompactChange={handleCompactChange} onReset={handleResetAll} />}
           {view === "perfil" && <ProfileView user={user} overallPercent={overallPercent} watchedEpisodes={watchedEpisodes} totalEpisodes={totalEpisodes} doneCount={enriched.filter(work => work.status === "concluido").length} activityCount={activity.length} onOpenPreferences={() => navigate("preferencias")} onLogout={async () => { await logout(); navigate("dashboard"); }} />}
         </main>
       </div>
@@ -406,7 +443,7 @@ function ProfileView({ user, overallPercent, watchedEpisodes, totalEpisodes, don
   </>;
 }
 
-function Preferences({ route, setRoute, onReset }: { route: string; setRoute: (value: string) => void; onReset: () => void }) { const [smart, setSmart] = useState(true); const [compact, setCompact] = useState(false); return <><section className="page-heading compact"><div><div className="eyebrow"><Settings2 size={14} /> CONTROLO DO ARQUIVO</div><h1>Preferências<span className="heading-dot">.</span></h1><p>Afine a experiência ao seu ritmo de visualização.</p></div></section><section className="settings-layout"><div className="settings-card"><div className="settings-title"><div className="settings-icon"><Compass size={18} /></div><div><h2>Rota principal</h2><p>Escolha a jornada que aparece no dashboard.</p></div></div><div className="settings-field"><label>Ordem de visualização</label><select value={route} onChange={event => setRoute(event.target.value)}><option>Rota principal — Fuyuki</option><option>Grand Order — Singularidades</option><option>Prisma☆Illya — Ordem completa</option></select></div></div><div className="settings-card"><div className="settings-title"><div className="settings-icon"><Sparkles size={18} /></div><div><h2>Assistente FateFlow</h2><p>Pequenas sugestões baseadas no seu progresso.</p></div></div><SettingToggle label="Recomendações inteligentes" description="Sugerir o próximo título e sessões curtas." checked={smart} onChange={setSmart} /><SettingToggle label="Modo compacto" description="Mostrar mais itens por ecrã no catálogo." checked={compact} onChange={setCompact} /></div><div className="settings-card danger-card"><div className="settings-title"><div className="settings-icon"><Database size={18} /></div><div><h2>Dados do arquivo</h2><p>O protótipo guarda o progresso neste navegador.</p></div></div><button className="danger-button" onClick={onReset}>Repor progresso inicial</button></div></section></>; }
+function Preferences({ route, setRoute, smart, compact, onSmartChange, onCompactChange, onReset }: { route: string; setRoute: (value: string) => void; smart: boolean; compact: boolean; onSmartChange: (value: boolean) => void; onCompactChange: (value: boolean) => void; onReset: () => void }) { return <><section className="page-heading compact"><div><div className="eyebrow"><Settings2 size={14} /> CONTROLO DO ARQUIVO</div><h1>Preferências<span className="heading-dot">.</span></h1><p>Afine a experiência ao seu ritmo de visualização.</p></div></section><section className="settings-layout"><div className="settings-card"><div className="settings-title"><div className="settings-icon"><Compass size={18} /></div><div><h2>Rota principal</h2><p>Escolha a jornada que aparece no dashboard.</p></div></div><div className="settings-field"><label>Ordem de visualização</label><select value={route} onChange={event => setRoute(event.target.value)}><option>Rota principal — Fuyuki</option><option>Grand Order — Singularidades</option><option>Prisma☆Illya — Ordem completa</option></select></div></div><div className="settings-card"><div className="settings-title"><div className="settings-icon"><Sparkles size={18} /></div><div><h2>Assistente FateFlow</h2><p>Pequenas sugestões baseadas no seu progresso.</p></div></div><SettingToggle label="Recomendações inteligentes" description="Sugerir o próximo título e sessões curtas." checked={smart} onChange={onSmartChange} /><SettingToggle label="Modo compacto" description="Mostrar mais itens por ecrã no catálogo." checked={compact} onChange={onCompactChange} /></div><div className="settings-card danger-card"><div className="settings-title"><div className="settings-icon"><Database size={18} /></div><div><h2>Dados do arquivo</h2><p>O progresso fica guardado na tua conta e sincroniza entre dispositivos.</p></div></div><button className="danger-button" onClick={onReset}>Repor progresso inicial</button></div></section></>; }
 
 function SettingToggle({ label, description, checked, onChange }: { label: string; description: string; checked: boolean; onChange: (value: boolean) => void }) { return <label className="setting-toggle"><div><strong>{label}</strong><span>{description}</span></div><button type="button" className={`toggle ${checked ? "on" : ""}`} onClick={() => onChange(!checked)} aria-pressed={checked}><i /></button></label>; }
 

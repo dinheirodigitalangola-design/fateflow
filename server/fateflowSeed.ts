@@ -1,11 +1,12 @@
 /**
- * FateFlow — seed idempotente (Fase 1).
- * - Insere/atualiza as 15 obras canónicas, episódios genéricos, 4 rotas e route_items.
+ * FateFlow — seed idempotente (Fase 1 + multi-anime).
+ * - Franquia "fate" + 15 obras canónicas, episódios genéricos, 4 rotas e route_items.
  * - Usa onDuplicateKeyUpdate → seguro correr várias vezes, nunca apaga dados.
  * - NÃO é chamado automaticamente no arranque (ver server/_core/index.ts — sem auto-seed).
  * - Uso: `pnpm db:seed` (requer DATABASE_URL).
  */
-import { episodes, routeItems, routes, works } from "../drizzle/schema";
+import { eq } from "drizzle-orm";
+import { episodes, franchises, routeItems, routes, works } from "../drizzle/schema";
 import { CATALOG_ROUTES, CATALOG_WORKS } from "../shared/fateflowCatalog";
 import { getDb } from "./db";
 
@@ -17,6 +18,17 @@ function episodeTitle(workSlug: string, shortTitle: string, n: number, total: nu
 export async function seedFateFlow() {
   const db = await getDb();
   if (!db) throw new Error("DATABASE_URL não configurada — seed abortado sem alterações.");
+
+  // 0. Franquia Fate (upsert por slug — 1ª de N franquias futuras)
+  await db
+    .insert(franchises)
+    .values({ slug: "fate", name: "Fate", description: "Franquia Fate — Guerra do Santo Graal e universos relacionados.", isActive: true })
+    .onDuplicateKeyUpdate({
+      set: { name: "Fate", description: "Franquia Fate — Guerra do Santo Graal e universos relacionados.", isActive: true },
+    });
+  const fateRows = await db.select().from(franchises).where(eq(franchises.slug, "fate")).limit(1);
+  const fateId = fateRows[0]?.id;
+  if (!fateId) throw new Error("Seed abortado: franquia fate não criada.");
 
   // 1. Works (upsert por slug)
   for (const w of CATALOG_WORKS) {
@@ -59,6 +71,12 @@ export async function seedFateFlow() {
   const allWorks = await db.select().from(works);
   const workIdBySlug = new Map(allWorks.map((w) => [w.slug, w.id]));
 
+  // 1b. Liga as obras do catálogo Fate à franquia (idempotente: repõe o mesmo valor).
+  // Os slugs são globalmente únicos, por isso nunca toca em obras de outras franquias.
+  for (const [, workId] of workIdBySlug) {
+    await db.update(works).set({ franchiseId: fateId }).where(eq(works.id, workId));
+  }
+
   // 2. Episodes genéricos (1..N por obra, idempotente)
   for (const w of CATALOG_WORKS) {
     const workId = workIdBySlug.get(w.slug);
@@ -83,6 +101,12 @@ export async function seedFateFlow() {
   const allRoutes = await db.select().from(routes);
   const routeIdBySlug = new Map(allRoutes.map((r) => [r.slug, r.id]));
 
+  // 3b. Liga as rotas do catálogo Fate à franquia (idempotente).
+  for (const r of CATALOG_ROUTES) {
+    const routeId = routeIdBySlug.get(r.slug);
+    if (routeId) await db.update(routes).set({ franchiseId: fateId }).where(eq(routes.id, routeId));
+  }
+
   // 4. Route items (upsert por par route+work via delete+insert ordenado?
   //    Para manter idempotência sem apagar progresso: upsert individual por (routeId, workId).)
   for (const r of CATALOG_ROUTES) {
@@ -100,5 +124,5 @@ export async function seedFateFlow() {
     }
   }
 
-  return { works: CATALOG_WORKS.length, routes: CATALOG_ROUTES.length };
+  return { works: CATALOG_WORKS.length, routes: CATALOG_ROUTES.length, franchises: 1 };
 }

@@ -3,15 +3,20 @@ import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { CATALOG_WORKS } from "../shared/fateflowCatalog";
 import {
+  addToLibrary,
   clearActivity,
   getUserPreferences,
   getUserProgressMap,
   getWorkBySlug,
   listActivity,
   listEpisodes,
+  listFranchises,
+  listLibrary,
   listRoutesWithItems,
   listWorks,
   migrateLocalProgress,
+  removeFromLibrary,
+  resetAllProgress,
   setWorkProgress,
   updateUserPreferences,
 } from "./fateflowDb";
@@ -26,13 +31,49 @@ function dbError(e: unknown): never {
 
 const slugSchema = z.string().min(1).max(128);
 
-export const catalogRouter = router({
+export const franchisesRouter = router({
   list: publicProcedure.query(async () => {
     try {
-      return await listWorks();
+      return await listFranchises();
+    } catch (e) {
+      return dbError(e);
+    }
+  }),
+});
+
+export const libraryRouter = router({
+  list: protectedProcedure.query(async ({ ctx }) => {
+    try {
+      return await listLibrary(ctx.user.id);
+    } catch (e) {
+      return dbError(e);
+    }
+  }),
+  add: protectedProcedure.input(z.object({ workSlug: slugSchema })).mutation(async ({ ctx, input }) => {
+    try {
+      return await addToLibrary(ctx.user.id, input.workSlug);
+    } catch (e) {
+      return dbError(e);
+    }
+  }),
+  remove: protectedProcedure.input(z.object({ workSlug: slugSchema })).mutation(async ({ ctx, input }) => {
+    try {
+      return await removeFromLibrary(ctx.user.id, input.workSlug);
+    } catch (e) {
+      return dbError(e);
+    }
+  }),
+});
+
+export const catalogRouter = router({
+  list: publicProcedure.input(z.object({ franchiseSlug: slugSchema.optional() }).optional()).query(async ({ input }) => {
+    try {
+      const rows = await listWorks(input?.franchiseSlug);
+      return rows.map((r) => ({ ...r, franchiseSlug: (r as { franchiseSlug?: string | null }).franchiseSlug ?? null }));
     } catch {
       // fallback demo: catálogo estático quando a DB não está ligada
-      return CATALOG_WORKS.map((w, i) => ({
+      const filtered = input?.franchiseSlug && input.franchiseSlug !== "fate" ? [] : CATALOG_WORKS;
+      return filtered.map((w, i) => ({
         id: -(i + 1),
         slug: w.slug,
         title: w.title,
@@ -47,6 +88,7 @@ export const catalogRouter = router({
         color: w.color,
         badge: w.badge ?? null,
         coverUrl: null as string | null,
+        franchiseSlug: "fate" as string | null,
         isActive: true,
         createdAt: new Date(0),
         updatedAt: new Date(0),
@@ -139,6 +181,13 @@ export const progressRouter = router({
         return dbError(e);
       }
     }),
+  resetAll: protectedProcedure.mutation(async ({ ctx }) => {
+    try {
+      return await resetAllProgress(ctx.user.id);
+    } catch (e) {
+      return dbError(e);
+    }
+  }),
 });
 
 export const activityRouter = router({

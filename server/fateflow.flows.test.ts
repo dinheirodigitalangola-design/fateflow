@@ -49,7 +49,7 @@ const EXPECTED_ROUTE_ITEMS = CATALOG_ROUTES.reduce((s, r) => s + r.workSlugs.len
 describe("seed idempotente (2 execuções, sem deletes)", () => {
   it("cria 15 works / N episódios / 4 rotas / 26 itens e repete sem duplicar", async () => {
     const r1 = await seedFateFlow();
-    expect(r1).toEqual({ works: 15, routes: 4 });
+    expect(r1).toEqual({ works: 15, routes: 4, franchises: 1 });
     expect(fake.store.works).toHaveLength(15);
     expect(fake.store.episodes).toHaveLength(EXPECTED_EPISODES);
     expect(fake.store.routes).toHaveLength(4);
@@ -58,7 +58,7 @@ describe("seed idempotente (2 execuções, sem deletes)", () => {
 
     const snapshot = JSON.stringify(fake.store);
     const r2 = await seedFateFlow();
-    expect(r2).toEqual({ works: 15, routes: 4 });
+    expect(r2).toEqual({ works: 15, routes: 4, franchises: 1 });
     expect(JSON.stringify(fake.store)).toBe(snapshot);
     expect(fake.stats.deletes).toBe(0);
   });

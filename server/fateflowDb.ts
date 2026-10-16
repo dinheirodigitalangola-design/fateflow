@@ -1,6 +1,6 @@
 /** Queries FateFlow sobre o Drizzle. userId vem sempre do ctx autenticado — nunca do browser. */
 import { and, desc, eq } from "drizzle-orm";
-import { activityLog, episodes, routeItems, routes, userPreferences, userProgress, works } from "../drizzle/schema";
+import { activityLog, episodes, franchises, routeItems, routes, userLibrary, userPreferences, userProgress, works } from "../drizzle/schema";
 import { clampWatched, statusFor } from "../shared/fateflowCatalog";
 import { getDb } from "./db";
 
@@ -10,10 +10,52 @@ async function dbOrThrow() {
   return db;
 }
 
-export async function listWorks() {
+export async function listFranchises() {
   const db = await dbOrThrow();
-  const rows = await db.select().from(works);
-  return [...rows].sort((a, b) => (a.orderIndex ?? 0) - (b.orderIndex ?? 0));
+  const rows = await db.select().from(franchises);
+  return [...rows].sort((a, b) => (a.id ?? 0) - (b.id ?? 0));
+}
+
+export async function listWorks(franchiseSlug?: string) {
+  const db = await dbOrThrow();
+  const allFranchises = await db.select().from(franchises);
+  const slugById = new Map(allFranchises.map((f) => [f.id, f.slug]));
+  let rows = await db.select().from(works);
+  if (franchiseSlug) {
+    const fid = allFranchises.find((f) => f.slug === franchiseSlug)?.id;
+    if (fid == null) return [];
+    rows = rows.filter((w) => w.franchiseId === fid);
+  }
+  return [...rows]
+    .sort((a, b) => (a.orderIndex ?? 0) - (b.orderIndex ?? 0))
+    .map((w) => ({ ...w, franchiseSlug: (w.franchiseId != null ? slugById.get(w.franchiseId) : undefined) ?? null }));
+}
+
+/** Biblioteca pessoal: obras que o utilizador escolheu acompanhar. */
+export async function listLibrary(userId: number) {
+  const db = await dbOrThrow();
+  const entries = await db.select().from(userLibrary).where(eq(userLibrary.userId, userId));
+  const allWorks = await db.select().from(works);
+  const byId = new Map(allWorks.map((w) => [w.id, w]));
+  return [...entries]
+    .sort((a, b) => (a.id ?? 0) - (b.id ?? 0))
+    .map((e) => ({ ...e, work: byId.get(e.workId) ?? null }));
+}
+
+export async function addToLibrary(userId: number, workSlug: string) {
+  const db = await dbOrThrow();
+  const work = await getWorkBySlug(workSlug);
+  if (!work) throw new Error("WORK_NOT_FOUND");
+  await db.insert(userLibrary).values({ userId, workId: work.id }).onDuplicateKeyUpdate({ set: { userId } });
+  return { slug: work.slug, added: true as const };
+}
+
+export async function removeFromLibrary(userId: number, workSlug: string) {
+  const db = await dbOrThrow();
+  const work = await getWorkBySlug(workSlug);
+  if (!work) throw new Error("WORK_NOT_FOUND");
+  await db.delete(userLibrary).where(and(eq(userLibrary.userId, userId), eq(userLibrary.workId, work.id)));
+  return { slug: work.slug, removed: true as const };
 }
 
 export async function getWorkBySlug(slug: string) {
@@ -117,6 +159,15 @@ export async function setWorkProgress(userId: number, workSlug: string, watchedR
   }
 
   return { slug: work.slug, watchedEpisodes: watched, status };
+}
+
+/** Repor total: apaga todo o progresso e histórico do utilizador (sempre filtrado por userId). */
+export async function resetAllProgress(userId: number) {
+  const db = await dbOrThrow();
+  const rows = await db.select().from(userProgress).where(eq(userProgress.userId, userId));
+  await db.delete(userProgress).where(eq(userProgress.userId, userId));
+  await db.delete(activityLog).where(eq(activityLog.userId, userId));
+  return { resetWorks: rows.length };
 }
 
 /** Migração localStorage -> conta: para cada slug, fica o max(db, local), com clamp. */

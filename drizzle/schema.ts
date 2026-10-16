@@ -27,7 +27,24 @@ export type InsertUser = typeof users.$inferInsert;
 
 // ---------------------------------------------------------------------------
 // FateFlow — Fase 1: modelo de dados de produção (aditivo, não remove users)
+// Fase multi-anime: o catálogo organiza-se por franquia (Fate é apenas a 1ª).
+// works/universe/arc mantêm-se (agrupamento interno da franquia); franchiseId
+// diz a que anime pertence cada obra. Tudo aditivo e nullable para não
+// quebrar dados existentes.
 // ---------------------------------------------------------------------------
+
+/** Franquias de anime (ex: fate, futuras: outros animes). */
+export const franchises = mysqlTable("franchises", {
+  id: int("id").autoincrement().primaryKey(),
+  slug: varchar("slug", { length: 128 }).notNull().unique(),
+  name: varchar("name", { length: 255 }).notNull(),
+  description: text("description"),
+  isActive: boolean("isActive").default(true).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type Franchise = typeof franchises.$inferSelect;
+export type InsertFranchise = typeof franchises.$inferInsert;
 
 /** Catálogo de obras (normaliza as 15 obras do MVP em Home.tsx). */
 export const works = mysqlTable("works", {
@@ -48,6 +65,8 @@ export const works = mysqlTable("works", {
   badge: varchar("badge", { length: 128 }),
   coverUrl: text("coverUrl"),
   isActive: boolean("isActive").default(true).notNull(),
+  /** Franquia a que a obra pertence (nullable = catálogo pré-franquias). */
+  franchiseId: int("franchiseId"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
@@ -79,6 +98,8 @@ export const routes = mysqlTable("routes", {
   description: text("description"),
   universe: varchar("universe", { length: 64 }),
   isDefault: boolean("isDefault").default(false).notNull(),
+  /** Franquia da rota (nullable = rotas pré-franquias). */
+  franchiseId: int("franchiseId"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
 
@@ -144,3 +165,17 @@ export const activityLog = mysqlTable("activity_log", {
 
 export type ActivityLog = typeof activityLog.$inferSelect;
 export type InsertActivityLog = typeof activityLog.$inferInsert;
+
+/** Biblioteca pessoal: obras que o utilizador escolheu acompanhar (multi-anime).
+ * O progresso continua em user_progress; esta tabela diz *o quê* seguir. */
+export const userLibrary = mysqlTable("user_library", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull(),
+  workId: int("workId").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex("user_library_user_work_unique").on(table.userId, table.workId),
+]);
+
+export type UserLibrary = typeof userLibrary.$inferSelect;
+export type InsertUserLibrary = typeof userLibrary.$inferInsert;

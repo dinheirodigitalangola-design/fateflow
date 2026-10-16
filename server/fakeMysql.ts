@@ -18,12 +18,14 @@ export type FakeStats = { inserts: number; updates: number; deletes: number; sel
 export function createFakeMysql() {
   const store: Record<string, Record<string, unknown>[]> = {
     users: [],
+    franchises: [],
     works: [],
     episodes: [],
     routes: [],
     route_items: [],
     user_progress: [],
     user_preferences: [],
+    user_library: [],
     activity_log: [],
   };
   const seq: Record<string, number> = {};
@@ -56,6 +58,8 @@ export function createFakeMysql() {
     switch (key) {
       case "users":
         return a.openId === b.openId;
+      case "franchises":
+        return a.slug === b.slug;
       case "works":
       case "routes":
         return a.slug === b.slug;
@@ -63,6 +67,7 @@ export function createFakeMysql() {
         return a.workId === b.workId && a.episodeNumber === b.episodeNumber;
       case "route_items":
       case "user_progress":
+      case "user_library":
         return (key === "route_items" ? a.routeId === b.routeId : a.userId === b.userId) && a.workId === b.workId;
       case "user_preferences":
         return a.userId === b.userId;
