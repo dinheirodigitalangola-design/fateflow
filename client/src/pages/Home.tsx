@@ -15,16 +15,19 @@ import {
   LayoutDashboard,
   ListFilter,
   LogIn,
+  LogOut,
   Menu,
   MoreHorizontal,
   Play,
   Plus,
   Search,
   Settings2,
+  ShieldCheck,
   Sparkles,
   Star,
   Target,
   Tv,
+  User,
   X,
   Zap,
 } from "lucide-react";
@@ -34,7 +37,7 @@ import { useAuth } from "@/_core/hooks/useAuth";
 import { startLogin } from "@/const";
 import { toast } from "sonner";
 
-type View = "dashboard" | "catalogo" | "rota" | "historico" | "preferencias";
+type View = "dashboard" | "catalogo" | "rota" | "historico" | "preferencias" | "perfil";
 type Status = "concluido" | "progresso" | "proximo" | "faltam";
 type Universe = "Fuyuki" | "Grand Order" | "Alternativo" | "Prisma☆Illya" | "Comédia";
 type Work = {
@@ -96,6 +99,7 @@ const NAV_ITEMS: { id: View; label: string; icon: typeof LayoutDashboard }[] = [
   { id: "catalogo", label: "Catálogo", icon: BookOpen },
   { id: "historico", label: "Histórico", icon: History },
   { id: "preferencias", label: "Preferências", icon: Settings2 },
+  { id: "perfil", label: "Perfil", icon: User },
 ];
 
 function getStored<T>(key: string, fallback: T): T {
@@ -119,7 +123,7 @@ export default function Home() {
   const { user, loading: authLoading, logout } = useAuth();
   const utils = trpc.useUtils();
   const initialPath = typeof window !== "undefined" ? window.location.pathname.replace(/^\//, "") : "";
-  const initialView: View = initialPath === "catalogo" || initialPath === "rota" || initialPath === "historico" || initialPath === "preferencias" ? initialPath : "dashboard";
+  const initialView: View = initialPath === "catalogo" || initialPath === "rota" || initialPath === "historico" || initialPath === "preferencias" || initialPath === "perfil" ? initialPath : "dashboard";
   const [view, setView] = useState<View>(initialView);
   const [mobileMenu, setMobileMenu] = useState(false);
   const [localProgress, setLocalProgress] = useState<Record<string, number>>(() => withoutLegacyDemoProgress(getStored("fateflow-progress", INITIAL_PROGRESS)));
@@ -265,14 +269,14 @@ export default function Home() {
         <div className="rail-section-label">Atalhos</div>
         <button className="rail-link subtle" onClick={() => { setFilter("progresso"); navigate("catalogo"); }}><Play size={17} /><span>Continuar a ver</span></button>
         <button className="rail-link subtle" onClick={() => { setFilter("faltam"); navigate("catalogo"); }}><Target size={17} /><span>Em falta</span></button>
-        <div className="rail-bottom-card"><div className="mini-sigil"><Sparkles size={15} /></div><strong>O seu arquivo mágico</strong><span>{user ? `Conta: ${user.name ?? user.email ?? "ligada"}` : "Modo demo — neste navegador"}</span><div className="storage-bar"><i style={{ width: `${Math.max(24, overallPercent)}%` }} /></div><small>{overallPercent}% da rota explorada</small>{user ? <button className="soft-button" style={{ marginTop: 8 }} onClick={() => logout()}>Sair</button> : <button className="soft-button" style={{ marginTop: 8 }} onClick={() => { try { startLogin(); } catch { toast.error("Login indisponível neste ambiente"); } }} disabled={authLoading}>{authLoading ? "A ligar..." : "Entrar / Criar conta"}</button>}</div>
+        <div className="rail-bottom-card"><div className="mini-sigil"><Sparkles size={15} /></div><strong>O seu arquivo mágico</strong><span>{user ? `Conta: ${user.name ?? user.email ?? "ligada"}` : "A verificar sessão..."}</span><div className="storage-bar"><i style={{ width: `${Math.max(24, overallPercent)}%` }} /></div><small>{overallPercent}% da rota explorada</small><button className="soft-button" style={{ marginTop: 8 }} onClick={() => navigate("perfil")}><User size={15} /> O meu perfil</button></div>
       </aside>
 
       <div className="main-area">
         <header className="topbar">
           <button className="mobile-menu-button" onClick={() => setMobileMenu(!mobileMenu)} aria-label="Abrir menu"><Menu size={21} /></button>
           <div className="breadcrumb"><span>FateFlow</span><ChevronRight size={15} /><strong>{NAV_ITEMS.find(item => item.id === view)?.label ?? "Dashboard"}</strong></div>
-          <div className="topbar-actions"><button className="top-icon" aria-label="Ajuda"><CircleHelp size={19} /></button><button className="top-icon has-dot" aria-label="Notificações"><Zap size={18} /></button>{user ? <div className="avatar" title={user.email ?? user.name ?? "Conta ligada"}>{(user.name ?? user.email ?? "FF").slice(0, 2).toUpperCase()}</div> : <button className="soft-button" onClick={() => { try { startLogin(); } catch { toast.error("Login indisponível neste ambiente"); } }}>Entrar</button>}</div>
+          <div className="topbar-actions"><button className="top-icon" aria-label="Ajuda"><CircleHelp size={19} /></button><button className="top-icon has-dot" aria-label="Notificações"><Zap size={18} /></button><button className="avatar" title={`${user.name ?? user.email ?? "Conta ligada"} — abrir perfil`} onClick={() => navigate("perfil")}>{(user.name ?? user.email ?? "FF").slice(0, 2).toUpperCase()}</button></div>
         </header>
 
         <main className="page-content">
@@ -281,6 +285,7 @@ export default function Home() {
           {view === "rota" && <RouteView works={mainWorks} route={route} setRoute={handleRouteChange} onSelect={setSelectedWork} progress={progress} onMark={updateProgress} />}
           {view === "historico" && <HistoryView activity={activity} onClear={() => { setLocalActivity([]); toast("Histórico limpo"); }} />}
           {view === "preferencias" && <Preferences route={route} setRoute={handleRouteChange} onReset={() => { setLocalProgress(INITIAL_PROGRESS); setLocalActivity(INITIAL_ACTIVITY); toast.success("Progresso reposto", { description: "O arquivo voltou ao estado inicial." }); }} />}
+          {view === "perfil" && <ProfileView user={user} overallPercent={overallPercent} watchedEpisodes={watchedEpisodes} totalEpisodes={totalEpisodes} doneCount={enriched.filter(work => work.status === "concluido").length} activityCount={activity.length} onOpenPreferences={() => navigate("preferencias")} onLogout={async () => { await logout(); navigate("dashboard"); }} />}
         </main>
       </div>
 
@@ -381,6 +386,25 @@ function RouteView({ works, route, setRoute, onSelect, progress, onMark }: { wor
 </>; }
 
 function HistoryView({ activity, onClear }: { activity: Activity[]; onClear: () => void }) { return <><section className="page-heading compact"><div><div className="eyebrow"><History size={14} /> REGISTRO DE JORNADA</div><h1>Histórico<span className="heading-dot">.</span></h1><p>Tudo o que marcou no seu arquivo, numa só linha do tempo.</p></div>{activity.length > 0 && <button className="soft-button" onClick={onClear}><X size={15} /> Limpar histórico</button>}</section><section className="history-panel"><div className="history-summary"><div><strong>{activity.length}</strong><span>ações recentes</span></div><div><strong>3</strong><span>dias seguidos</span></div><div><strong>64%</strong><span>ritmo semanal</span></div></div><div className="history-list">{activity.length ? activity.map(item => <div className="history-item" key={item.id}><div className={`history-marker ${item.kind}`} /> <div className="history-date">{item.date}</div><div className="history-detail"><strong>{item.title}</strong><span>{item.detail}</span></div><button className="icon-quiet"><ChevronRight size={17} /></button></div>) : <div className="empty-state"><History size={28} /><h3>O seu histórico está limpo</h3><p>Quando marcar um episódio, a atividade aparece aqui.</p></div>}</div></section></>; }
+
+function ProfileView({ user, overallPercent, watchedEpisodes, totalEpisodes, doneCount, activityCount, onOpenPreferences, onLogout }: { user: { name?: string | null; email?: string | null; loginMethod?: string | null; createdAt?: Date | string; lastSignedIn?: Date | string }; overallPercent: number; watchedEpisodes: number; totalEpisodes: number; doneCount: number; activityCount: number; onOpenPreferences: () => void; onLogout: () => void }) {
+  const initials = (user.name ?? user.email ?? "FF").slice(0, 2).toUpperCase();
+  const memberSince = user.createdAt ? new Date(user.createdAt).toLocaleDateString("pt-BR") : "—";
+  const lastSeen = user.lastSignedIn ? new Date(user.lastSignedIn).toLocaleString("pt-BR") : "—";
+  return <>
+    <section className="page-heading compact"><div><div className="eyebrow"><User size={14} /> CONTA</div><h1>Perfil<span className="heading-dot">.</span></h1><p>Os teus dados e a tua sessão neste arquivo.</p></div></section>
+    <section className="route-summary"><div className="route-emblem"><span style={{ fontSize: 24, fontWeight: 700 }}>{initials}</span></div><div><span>CONTA LIGADA</span><h2>{user.name ?? "Mago sem nome"}</h2><p>{user.email ?? "Sem email"} · via {user.loginMethod === "google" ? "Google" : (user.loginMethod ?? "conta")}</p></div><div className="route-summary-progress"><strong>{overallPercent}%</strong><span>explorado</span></div></section>
+    <section className="stats-row">
+      <Metric icon={<BarChart3 />} label="Progresso total" value={`${overallPercent}%`} detail={`${watchedEpisodes} de ${totalEpisodes} itens`} accent="blue" />
+      <Metric icon={<Check />} label="Obras concluídas" value={`${doneCount}`} detail="neste arquivo" accent="red" />
+      <Metric icon={<History />} label="Ações registadas" value={`${activityCount}`} detail="no histórico" accent="violet" />
+    </section>
+    <section className="settings-layout">
+      <div className="settings-card"><div className="settings-title"><div className="settings-icon"><ShieldCheck size={18} /></div><div><h2>Sessão e conta</h2><p>Membro desde {memberSince} · última visita {lastSeen}.</p></div></div><div className="settings-field"><button className="soft-button" onClick={onOpenPreferences}><Settings2 size={15} /> Abrir preferências</button></div></div>
+      <div className="settings-card danger-card"><div className="settings-title"><div className="settings-icon"><LogOut size={18} /></div><div><h2>Terminar sessão</h2><p>O progresso fica guardado na tua conta para a próxima visita.</p></div></div><button className="danger-button" onClick={onLogout}>Sair da conta</button></div>
+    </section>
+  </>;
+}
 
 function Preferences({ route, setRoute, onReset }: { route: string; setRoute: (value: string) => void; onReset: () => void }) { const [smart, setSmart] = useState(true); const [compact, setCompact] = useState(false); return <><section className="page-heading compact"><div><div className="eyebrow"><Settings2 size={14} /> CONTROLO DO ARQUIVO</div><h1>Preferências<span className="heading-dot">.</span></h1><p>Afine a experiência ao seu ritmo de visualização.</p></div></section><section className="settings-layout"><div className="settings-card"><div className="settings-title"><div className="settings-icon"><Compass size={18} /></div><div><h2>Rota principal</h2><p>Escolha a jornada que aparece no dashboard.</p></div></div><div className="settings-field"><label>Ordem de visualização</label><select value={route} onChange={event => setRoute(event.target.value)}><option>Rota principal — Fuyuki</option><option>Grand Order — Singularidades</option><option>Prisma☆Illya — Ordem completa</option></select></div></div><div className="settings-card"><div className="settings-title"><div className="settings-icon"><Sparkles size={18} /></div><div><h2>Assistente FateFlow</h2><p>Pequenas sugestões baseadas no seu progresso.</p></div></div><SettingToggle label="Recomendações inteligentes" description="Sugerir o próximo título e sessões curtas." checked={smart} onChange={setSmart} /><SettingToggle label="Modo compacto" description="Mostrar mais itens por ecrã no catálogo." checked={compact} onChange={setCompact} /></div><div className="settings-card danger-card"><div className="settings-title"><div className="settings-icon"><Database size={18} /></div><div><h2>Dados do arquivo</h2><p>O protótipo guarda o progresso neste navegador.</p></div></div><button className="danger-button" onClick={onReset}>Repor progresso inicial</button></div></section></>; }
 
