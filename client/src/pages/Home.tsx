@@ -28,6 +28,9 @@ import {
   Zap,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { trpc } from "@/lib/trpc";
+import { useAuth } from "@/_core/hooks/useAuth";
+import { startLogin } from "@/const";
 import { toast } from "sonner";
 
 type View = "dashboard" | "catalogo" | "rota" | "historico" | "preferencias";
@@ -101,23 +104,107 @@ function statusLabel(status: Status) {
 function getInitials(title: string) { return title.split(/[ :—–]/).filter(Boolean).slice(0, 2).map(part => part[0]).join("").toUpperCase(); }
 
 export default function Home() {
+  const { user, loading: authLoading, logout } = useAuth();
+  const utils = trpc.useUtils();
   const initialPath = typeof window !== "undefined" ? window.location.pathname.replace(/^\//, "") : "";
   const initialView: View = initialPath === "catalogo" || initialPath === "rota" || initialPath === "historico" || initialPath === "preferencias" ? initialPath : "dashboard";
   const [view, setView] = useState<View>(initialView);
   const [mobileMenu, setMobileMenu] = useState(false);
-  const [progress, setProgress] = useState<Record<string, number>>(() => getStored("fateflow-progress", INITIAL_PROGRESS));
-  const [activity, setActivity] = useState<Activity[]>(() => getStored("fateflow-activity", INITIAL_ACTIVITY));
+  const [localProgress, setLocalProgress] = useState<Record<string, number>>(() => getStored("fateflow-progress", INITIAL_PROGRESS));
+  const [localActivity, setLocalActivity] = useState<Activity[]>(() => getStored("fateflow-activity", INITIAL_ACTIVITY));
   const [selectedWork, setSelectedWork] = useState<Work | null>(null);
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<"todos" | Universe | Status>("todos");
   const [catalogMode, setCatalogMode] = useState<"list" | "map">("list");
   const [route, setRoute] = useState("Rota principal — Fuyuki");
+  const [migrationDone, setMigrationDone] = useState(false);
 
-  useEffect(() => { localStorage.setItem("fateflow-progress", JSON.stringify(progress)); }, [progress]);
-  useEffect(() => { localStorage.setItem("fateflow-activity", JSON.stringify(activity)); }, [activity]);
+  useEffect(() => { localStorage.setItem("fateflow-progress", JSON.stringify(localProgress)); }, [localProgress]);
+  useEffect(() => { localStorage.setItem("fateflow-activity", JSON.stringify(localActivity)); }, [localActivity]);
 
-  const enriched = useMemo(() => WORKS.map(work => ({ ...work, progress: progress[work.id] ?? 0, status: statusFor(work, progress[work.id] ?? 0) })), [progress]);
-  const totalEpisodes = WORKS.reduce((sum, work) => sum + work.episodes, 0);
+  // --- Backend (só quando autenticado; modo demo continua em localStorage) ---
+  const progressQuery = trpc.progress.list.useQuery(undefined, { enabled: !!user, retry: false, refetchOnWindowFocus: false });
+  const activityQuery = trpc.activity.list.useQuery({ limit: 50 }, { enabled: !!user, retry: false, refetchOnWindowFocus: false });
+  const prefsQuery = trpc.preferences.get.useQuery(undefined, { enabled: !!user, retry: false, refetchOnWindowFocus: false });
+  const catalogQuery = trpc.catalog.list.useQuery(undefined, { retry: false, refetchOnWindowFocus: false });
+
+  const markMutation = trpc.progress.markEpisode.useMutation({
+    onSuccess: () => { utils.progress.list.invalidate(); utils.activity.list.invalidate(); },
+    onError: () => { toast.error("Falha ao gravar na conta", { description: "O progresso local foi mantido." }); },
+  });
+  const migrateMutation = trpc.progress.migrate.useMutation({
+    onSuccess: (res) => {
+      utils.progress.list.invalidate(); utils.activity.list.invalidate();
+      if (res.migrated > 0) toast.success(`Progresso migrado (${res.migrated} obras)`, { description: "A base de dados é agora a fonte principal." });
+    },
+  });
+  const prefsMutation = trpc.preferences.update.useMutation({ onSuccess: () => { utils.preferences.get.invalidate(); } });
+  const routesQuery = trpc.routes.list.useQuery(undefined, { enabled: !!user, retry: false, refetchOnWindowFocus: false });
+  const setActiveRoute = trpc.routes.setActive.useMutation({ onSuccess: () => { utils.preferences.get.invalidate(); } });
+
+  // Rota vinda do servidor quando logado (fallback: estado local demo).
+  useEffect(() => {
+    if (!user || !prefsQuery.data || !routesQuery.data) return;
+    const found = routesQuery.data.find((r) => r.id === prefsQuery.data.selectedRouteId);
+    if (found && found.name !== route) setRoute(found.name);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, prefsQuery.data, routesQuery.data]);
+
+  const handleRouteChange = (name: string) => {
+    setRoute(name);
+    if (user && routesQuery.data) {
+      const found = routesQuery.data.find((r) => r.name === name);
+      if (found) setActiveRoute.mutate({ routeId: found.id });
+    }
+  };
+
+  // Migrar localStorage -> conta uma vez por login; depois a DB é a fonte principal.
+  useEffect(() => {
+    if (!user || migrationDone || progressQuery.isLoading) return;
+    setMigrationDone(true);
+    const hasLocal = Object.values(localProgress).some((v) => v > 0);
+    if (hasLocal) migrateMutation.mutate({ local: localProgress });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, progressQuery.isLoading]);
+  useEffect(() => { setMigrationDone(false); }, [user?.openId]);
+
+  // Catálogo do backend quando disponível (fallback: constante local do MVP).
+  const worksFromServer: Work[] | null = useMemo(() => {
+    const rows = catalogQuery.data;
+    if (!rows || rows.length === 0) return null;
+    return rows.filter((r) => r.isActive !== false).map((r) => ({
+      id: r.slug,
+      title: r.title,
+      shortTitle: r.shortTitle ?? r.title,
+      year: r.year ?? "",
+      format: (r.format as Work["format"]) ?? "Série",
+      episodes: r.episodeCount ?? 1,
+      universe: (r.universe as Universe) ?? "Fuyuki",
+      arc: r.arc ?? "",
+      order: r.orderIndex ?? 99,
+      color: r.color ?? "blue",
+      description: r.description ?? "",
+      badge: r.badge ?? undefined,
+    }));
+  }, [catalogQuery.data]);
+  const activeWorks = worksFromServer ?? WORKS;
+
+  const progress: Record<string, number> = user && progressQuery.data ? progressQuery.data : localProgress;
+  const activity: Activity[] = useMemo(() => {
+    if (user && activityQuery.data) {
+      return activityQuery.data.map((a) => ({
+        id: String(a.id),
+        title: a.work?.shortTitle ?? a.work?.title ?? "FateFlow",
+        detail: a.actionType === "work_completed" ? "Obra concluída" : a.actionType === "work_reset" ? "Progresso reiniciado" : a.actionType === "progress_migrated" ? "Migração do progresso local" : "Episódio concluído",
+        date: a.createdAt ? new Date(a.createdAt).toLocaleString("pt-BR") : "",
+        kind: (a.actionType === "work_completed" ? "title" : "episode") as Activity["kind"],
+      }));
+    }
+    return localActivity;
+  }, [user, activityQuery.data, localActivity]);
+
+  const enriched = useMemo(() => activeWorks.map(work => ({ ...work, progress: progress[work.id] ?? 0, status: statusFor(work, progress[work.id] ?? 0) })), [activeWorks, progress]);
+  const totalEpisodes = activeWorks.reduce((sum, work) => sum + work.episodes, 0);
   const watchedEpisodes = enriched.reduce((sum, work) => sum + Math.min(work.progress, work.episodes), 0);
   const mainWorks = enriched.filter(work => work.universe === "Fuyuki");
   const current = enriched.find(work => work.status === "progresso") ?? enriched.find(work => work.status === "proximo") ?? enriched[0];
@@ -130,12 +217,15 @@ export default function Home() {
 
   const updateProgress = (work: Work, value: number, notify = true) => {
     const next = Math.max(0, Math.min(work.episodes, value));
-    setProgress(prev => ({ ...prev, [work.id]: next }));
-    if (next > (progress[work.id] ?? 0)) {
+    const prev = progress[work.id] ?? 0;
+    // Otimista local (mantém demo funcional offline); servidor confirma quando logado.
+    setLocalProgress(prevMap => ({ ...prevMap, [work.id]: next }));
+    if (user) markMutation.mutate({ workSlug: work.id, watchedEpisodes: next });
+    if (next > prev) {
       const detail = work.episodes === 1 ? "Marcado como assistido" : `Episódio ${next} concluído`;
       const kind: Activity["kind"] = work.episodes === 1 ? "title" : "episode";
-      setActivity(prev => [{ id: `${Date.now()}`, title: work.shortTitle, detail, date: "Agora", kind }, ...prev].slice(0, 10));
-      if (notify) toast.success(work.episodes === 1 ? `${work.shortTitle} concluído` : `Episódio ${next} marcado como visto`, { description: "O seu progresso foi atualizado." });
+      if (!user) setLocalActivity(prevA => [{ id: `${Date.now()}`, title: work.shortTitle, detail, date: "Agora", kind }, ...prevA].slice(0, 10));
+      if (notify) toast.success(work.episodes === 1 ? `${work.shortTitle} concluído` : `Episódio ${next} marcado como visto`, { description: user ? "A gravar na sua conta." : "Guardado neste navegador (modo demo)." });
     }
   };
 
@@ -156,22 +246,22 @@ export default function Home() {
         <div className="rail-section-label">Atalhos</div>
         <button className="rail-link subtle" onClick={() => { setFilter("progresso"); navigate("catalogo"); }}><Play size={17} /><span>Continuar a ver</span></button>
         <button className="rail-link subtle" onClick={() => { setFilter("faltam"); navigate("catalogo"); }}><Target size={17} /><span>Em falta</span></button>
-        <div className="rail-bottom-card"><div className="mini-sigil"><Sparkles size={15} /></div><strong>O seu arquivo mágico</strong><span>Sincronizado localmente</span><div className="storage-bar"><i style={{ width: `${Math.max(24, overallPercent)}%` }} /></div><small>{overallPercent}% da rota explorada</small></div>
+        <div className="rail-bottom-card"><div className="mini-sigil"><Sparkles size={15} /></div><strong>O seu arquivo mágico</strong><span>{user ? `Conta: ${user.name ?? user.email ?? "ligada"}` : "Modo demo — neste navegador"}</span><div className="storage-bar"><i style={{ width: `${Math.max(24, overallPercent)}%` }} /></div><small>{overallPercent}% da rota explorada</small>{user ? <button className="soft-button" style={{ marginTop: 8 }} onClick={() => logout()}>Sair</button> : <button className="soft-button" style={{ marginTop: 8 }} onClick={() => { try { startLogin(); } catch { toast.error("Login indisponível neste ambiente"); } }} disabled={authLoading}>{authLoading ? "A ligar..." : "Entrar / Criar conta"}</button>}</div>
       </aside>
 
       <div className="main-area">
         <header className="topbar">
           <button className="mobile-menu-button" onClick={() => setMobileMenu(!mobileMenu)} aria-label="Abrir menu"><Menu size={21} /></button>
           <div className="breadcrumb"><span>FateFlow</span><ChevronRight size={15} /><strong>{NAV_ITEMS.find(item => item.id === view)?.label ?? "Dashboard"}</strong></div>
-          <div className="topbar-actions"><button className="top-icon" aria-label="Ajuda"><CircleHelp size={19} /></button><button className="top-icon has-dot" aria-label="Notificações"><Zap size={18} /></button><div className="avatar">AM</div></div>
+          <div className="topbar-actions"><button className="top-icon" aria-label="Ajuda"><CircleHelp size={19} /></button><button className="top-icon has-dot" aria-label="Notificações"><Zap size={18} /></button>{user ? <div className="avatar" title={user.email ?? user.name ?? "Conta ligada"}>{(user.name ?? user.email ?? "FF").slice(0, 2).toUpperCase()}</div> : <button className="soft-button" onClick={() => { try { startLogin(); } catch { toast.error("Login indisponível neste ambiente"); } }}>Entrar</button>}</div>
         </header>
 
         <main className="page-content">
           {view === "dashboard" && <Dashboard current={current} enriched={enriched} overallPercent={overallPercent} watchedEpisodes={watchedEpisodes} totalEpisodes={totalEpisodes} activity={activity} onContinue={() => setSelectedWork(current)} onNavigate={navigate} onMark={() => updateProgress(current, (progress[current.id] ?? 0) + 1)} />}
           {view === "catalogo" && <Catalog filteredWorks={filteredWorks} search={search} setSearch={setSearch} filter={filter} setFilter={setFilter} catalogMode={catalogMode} setCatalogMode={setCatalogMode} onSelect={setSelectedWork} progress={progress} />}
-          {view === "rota" && <RouteView works={mainWorks} route={route} setRoute={setRoute} onSelect={setSelectedWork} progress={progress} onMark={updateProgress} />}
-          {view === "historico" && <HistoryView activity={activity} onClear={() => { setActivity([]); toast("Histórico limpo"); }} />}
-          {view === "preferencias" && <Preferences route={route} setRoute={setRoute} onReset={() => { setProgress(INITIAL_PROGRESS); setActivity(INITIAL_ACTIVITY); toast.success("Progresso reposto", { description: "O arquivo voltou ao estado inicial." }); }} />}
+          {view === "rota" && <RouteView works={mainWorks} route={route} setRoute={handleRouteChange} onSelect={setSelectedWork} progress={progress} onMark={updateProgress} />}
+          {view === "historico" && <HistoryView activity={activity} onClear={() => { setLocalActivity([]); toast("Histórico limpo"); }} />}
+          {view === "preferencias" && <Preferences route={route} setRoute={handleRouteChange} onReset={() => { setLocalProgress(INITIAL_PROGRESS); setLocalActivity(INITIAL_ACTIVITY); toast.success("Progresso reposto", { description: "O arquivo voltou ao estado inicial." }); }} />}
         </main>
       </div>
 

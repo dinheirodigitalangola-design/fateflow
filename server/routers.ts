@@ -2,6 +2,7 @@ import { COOKIE_NAME } from "@shared/const";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, router } from "./_core/trpc";
+import { activityRouter, catalogRouter, preferencesRouter, progressRouter, routesRouter } from "./fateflowRouters";
 
 export const appRouter = router({
     // if you need to use socket.io, read and register route in server/_core/index.ts, all api should start with '/api/' so that the gateway can route correctly
@@ -23,6 +24,11 @@ export const appRouter = router({
   //     db.getUserTodos(ctx.user.id)
   //   ),
   // }),
+  catalog: catalogRouter,
+  routes: routesRouter,
+  progress: progressRouter,
+  activity: activityRouter,
+  preferences: preferencesRouter,
 });
 
 export type AppRouter = typeof appRouter;

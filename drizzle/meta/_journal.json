@@ -8,6 +8,20 @@
       "when": 1788785580464,
       "tag": "0000_initial_users",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "5",
+      "when": 1792160703653,
+      "tag": "0001_fateflow_phase1",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "5",
+      "when": 1792160749827,
+      "tag": "0002_fateflow_phase1_uniques",
+      "breakpoints": true
     }
   ]
 }
