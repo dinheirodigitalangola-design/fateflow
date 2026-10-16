@@ -52,12 +52,14 @@ docker compose run --rm app pnpm db:seed
 docker compose run --rm app pnpm db:seed
 docker compose exec -T mysql mysql -u fateflow -p"$MYSQL_PASSWORD" fateflow \
   -e "SELECT (SELECT COUNT(*) FROM works) AS works, (SELECT COUNT(*) FROM episodes) AS episodes, (SELECT COUNT(*) FROM routes) AS routes, (SELECT COUNT(*) FROM route_items) AS route_items;"
-echo "^ esperado: works=15 routes=4 route_items=26 episodes=150"
+echo "^ esperado: works=15 routes=4 route_items=26 episodes=151"
 
 echo "== 7. Smoke test local =="
 sleep 3
 curl -fsS http://127.0.0.1:3000/api/health
-curl -fsS -X POST "http://127.0.0.1:3000/api/trpc/catalog.list?batch=1" -H 'Content-Type: application/json' -d '{"0":{}}' | head -c 200; echo
+echo
+# NOTA: tRPC v11 só aceita GET em queries (POST dá 405 e é normal).
+curl -fsS "http://127.0.0.1:3000/api/trpc/catalog.list?batch=1" | head -c 200; echo
 
 echo "== 8. Caddy =="
 echo "Adiciona o conteúdo de Caddyfile.fateflow ao Caddyfile do host e faz:"
